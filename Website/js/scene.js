@@ -12,7 +12,14 @@ const joystickKnob = document.getElementById('joystick-knob');
 function supportsWebGL() {
   try {
     const c = document.createElement('canvas');
-    return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl')));
+    // failIfMajorPerformanceCaveat:false tells the browser we're fine with
+    // a software/blocklisted-driver fallback instead of refusing outright —
+    // without it, browsers silently return null on many older GPUs.
+    const attrs = { failIfMajorPerformanceCaveat: false };
+    return !!(
+      window.WebGLRenderingContext &&
+      (c.getContext('webgl', attrs) || c.getContext('experimental-webgl', attrs))
+    );
   } catch (e) {
     return false;
   }
