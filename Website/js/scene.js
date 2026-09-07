@@ -64,7 +64,7 @@ if (!supportsWebGL()) {
 async function init() {
   const GROUND_SIZE = 40;
   const BOUNDS = GROUND_SIZE / 2 - 1.5;
-  const SKY = 0x7ec9ec;
+  const SKY = 0x131022; // dim, cozy dusk tone instead of a bright open-air plaza
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -82,15 +82,30 @@ async function init() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, 22, 46);
+  scene.fog = new THREE.Fog(SKY, 10, 32);
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const sun = new THREE.DirectionalLight(0xfff3d6, 0.85);
-  sun.position.set(-14, 20, 10);
-  scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0xbfe3ff, 0x3a3350, 0.4));
+  // Dim, warm, low-contrast lighting — a lit room at dusk rather than an
+  // open sunny plaza. A little cool ambient/hemisphere fill keeps shadows
+  // from crushing to pure black, plus a few warm torch-like accent lights.
+  scene.add(new THREE.AmbientLight(0x4a4560, 0.45));
+  const moon = new THREE.DirectionalLight(0x8fa0d8, 0.35);
+  moon.position.set(-14, 20, 10);
+  scene.add(moon);
+  scene.add(new THREE.HemisphereLight(0x2e2a44, 0x14121f, 0.3));
+
+  const torchPositions = [
+    [-BOUNDS + 1, 3.2, -BOUNDS + 1],
+    [BOUNDS - 1, 3.2, -BOUNDS + 1],
+    [-BOUNDS + 1, 3.2, BOUNDS - 1],
+    [BOUNDS - 1, 3.2, BOUNDS - 1],
+  ];
+  torchPositions.forEach(([x, y, z]) => {
+    const torch = new THREE.PointLight(0xffa64d, 1.1, 14, 2);
+    torch.position.set(x, y, z);
+    scene.add(torch);
+  });
 
   // ---------- ground ----------
   const groundTex = makeCheckerTexture();
@@ -222,9 +237,12 @@ async function init() {
 
   // ---------- loop ----------
   const clock = new THREE.Clock();
-  let facing = 0;
   const camLookAhead = new THREE.Vector3();
   const desiredCamPos = new THREE.Vector3();
+  const UP = new THREE.Vector3(0, 1, 0);
+  const tmpForward = new THREE.Vector3();
+  const tmpRight = new THREE.Vector3();
+  const tmpMove = new THREE.Vector3();
 
   function updateMovement(delta) {
     let ix = touchVec.x;
@@ -238,12 +256,19 @@ async function init() {
     if (len > 0.001) {
       const nx = ix / Math.max(len, 1);
       const ny = iy / Math.max(len, 1);
+
+      // Movement is relative to where the (drag-rotated) camera is looking,
+      // not fixed world axes — "forward" is whichever way the camera faces.
+      tmpForward.set(0, 0, -1).applyAxisAngle(UP, camYaw);
+      tmpRight.set(1, 0, 0).applyAxisAngle(UP, camYaw);
+      tmpMove.set(0, 0, 0).addScaledVector(tmpForward, -ny).addScaledVector(tmpRight, nx);
+
       const speed = 6.5;
-      player.position.x += nx * speed * delta;
-      player.position.z += ny * speed * delta;
+      player.position.x += tmpMove.x * speed * delta;
+      player.position.z += tmpMove.z * speed * delta;
       player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUNDS, BOUNDS);
       player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUNDS, BOUNDS);
-      facing = Math.atan2(nx, ny);
+      const facing = Math.atan2(tmpMove.x, tmpMove.z);
       player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, facing, Math.min(delta * 12, 1));
       player.userData.bob = (player.userData.bob || 0) + delta * 10;
     } else {
@@ -346,6 +371,22 @@ function buildPerimeter(scene, groundSize) {
   const stone = stoneMaterial(0xcfd3da);
   const roof = stoneMaterial(0x3f6fb0);
   const wood = stoneMaterial(0x7a5230);
+
+  // enclosing walls on all 4 sides — everything else below is decoration
+  // layered against these, but this guarantees a fully closed-in room
+  // regardless of gaps between the decorative buildings/towers.
+  const WALL_HEIGHT = 5;
+  const WALL_THICK = 1;
+  const nsWallGeo = new THREE.BoxGeometry(groundSize, WALL_HEIGHT, WALL_THICK);
+  const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize);
+  [-1, 1].forEach((side) => {
+    const wallNS = new THREE.Mesh(nsWallGeo, stone);
+    wallNS.position.set(0, WALL_HEIGHT / 2, side * bounds);
+    scene.add(wallNS);
+    const wallEW = new THREE.Mesh(ewWallGeo, stone);
+    wallEW.position.set(side * bounds, WALL_HEIGHT / 2, 0);
+    scene.add(wallEW);
+  });
 
   // back castle facade
   const facade = new THREE.Mesh(new THREE.BoxGeometry(22, 7, 1.5), stone);
