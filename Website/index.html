@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RealmDev — 8-Bit MMORPG Dev Community</title>
-<meta name="description" content="RealmDev is a community hub for 8-bit bullet-hell MMORPG development — source code releases, tutorials, help requests, project showcases, and server advertising.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>RealmDev — Enter the Vault</title>
+<meta name="description" content="RealmDev is a community hub for 8-bit bullet-hell MMORPG development. Step into the Vault: visit the forums, preview Warriors &amp; Wizards, meet Guill, and check the changelog.">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/favicon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,85 +12,75 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-</script>
-<script>
-  // Watchdog: if the 3D scene hasn't reported ready within a few seconds
-  // (old browser, blocked GPU, network hiccup, whatever), fall back to
-  // plain buttons instead of leaving people stuck on a loading screen.
-  window.__realmScene = { ready: false };
-  setTimeout(function () {
-    if (window.__realmScene.ready) return;
-    var loading = document.getElementById('scene-loading');
-    var fallback = document.getElementById('scene-fallback');
-    if (loading) loading.hidden = true;
-    if (fallback) fallback.hidden = false;
-    // Note: if scene.js finishes loading after this point, it un-hides
-    // itself and re-hides this fallback — success always wins.
-  }, 18000);
+{ "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
 </script>
 </head>
-<body class="game-page">
+<body>
 
-<main>
-  <div id="scene-root">
-    <div id="game-view">
-      <canvas id="scene-canvas"></canvas>
-
-      <div id="scene-loading">
-        <p class="loading-text">Loading the Nexus&hellip;</p>
-      </div>
-
-      <div id="touch-joystick" hidden>
-        <div id="joystick-base"><div id="joystick-knob"></div></div>
-      </div>
-
-      <div id="scene-fallback" hidden>
-        <p>Your browser can't render the 3D Nexus, but the realm is still open:</p>
-        <div class="cta-row">
-          <a class="btn btn-primary" href="https://forum.realmdev.org" target="_blank" rel="noopener">Enter the Forums</a>
-          <a class="btn btn-ghost" href="/realmtube">Realmtube</a>
-        </div>
-      </div>
+<div id="loading-screen">
+  <div class="loading-box">
+    <img class="loading-logo" src="assets/realmdev-logo.png" alt="RealmDev">
+    <p class="loading-text">Loading<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
+    <div class="loading-bar-track">
+      <div class="loading-bar-fill" id="loading-bar-fill"></div>
     </div>
-
-    <aside id="hud">
-      <div id="minimap-wrap">
-        <canvas id="minimap-canvas" width="200" height="140"></canvas>
-      </div>
-
-      <div class="hud-name">MonsterSlayer99</div>
-
-      <div class="stat-bars">
-        <div class="stat-bar-track">
-          <div class="stat-bar-fill hp"></div>
-          <span class="stat-bar-text">HP</span>
-        </div>
-        <div class="stat-bar-track">
-          <div class="stat-bar-fill mp"></div>
-          <span class="stat-bar-text">MP</span>
-        </div>
-      </div>
-
-      <div class="inv-grid">
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-        <div class="inv-slot"></div>
-      </div>
-
-      <ul class="hud-tips">
-        <li>WASD or Arrow Keys to walk</li>
-        <li>Drag to look around</li>
-        <li>Tap to interact with some features</li>
-      </ul>
-    </aside>
+    <p class="loading-hint">compiling the vault</p>
   </div>
+</div>
+
+<main id="scene-root">
+  <canvas id="scene-canvas"></canvas>
+
+  <div id="tooltip" class="pixel-frame" hidden></div>
+
+  <header id="site-header">
+    <img src="assets/realmdev-logo.png" alt="RealmDev" class="header-logo">
+    <p class="header-hint">click the glowing things</p>
+  </header>
 </main>
+
+<div id="panel-overlay" hidden>
+
+  <section id="panel-portal" class="panel pixel-frame" hidden>
+    <button class="panel-close" data-close aria-label="Close">✕</button>
+    <h2 class="panel-title">The Nexus Portal</h2>
+    <img class="portal-logo" src="assets/warriors-wizards-logo.png" alt="Warriors &amp; Wizards logo">
+    <p class="panel-body">
+      A realm-like bullet-hell MMORPG being forged behind the scenes at RealmDev — brand new assets,
+      brand new code, reworked content and upgraded mechanics, keeping the Flash-era bullet-hell spirit
+      alive for a modern audience. No grand quest, no epic saga — just the simple, cozy joy of gearing up
+      as a Warrior or a Wizard and slaying some monsters with friends.
+    </p>
+    <div class="portal-frame-wrap">
+      <iframe class="portal-frame" src="https://warriorandwizards.com" title="Warriors & Wizards preview" loading="lazy" referrerpolicy="no-referrer"></iframe>
+    </div>
+    <a class="btn" href="https://warriorandwizards.com" target="_blank" rel="noopener">Visit warriorandwizards.com ↗</a>
+  </section>
+
+  <section id="panel-credits" class="panel pixel-frame" hidden>
+    <button class="panel-close" data-close aria-label="Close">✕</button>
+    <h2 class="panel-title">Guild Hall — Credits</h2>
+    <ul class="credits-list">
+      <li><span class="credits-role">Founder &amp; Lead Developer</span><span class="credits-name">programasalami</span></li>
+      <li><span class="credits-role">Built with</span><span class="credits-name">Three.js · HTML5 Canvas · CSS3</span></li>
+      <li><span class="credits-role">Special thanks</span><span class="credits-name">the RealmDev community, keeping the Flash bullet-hell era alive</span></li>
+    </ul>
+    <a class="btn" href="https://github.com/programasalami/RealmDev" target="_blank" rel="noopener">View the repo ↗</a>
+  </section>
+
+  <section id="panel-changelog" class="panel pixel-frame" hidden>
+    <button class="panel-close" data-close aria-label="Close">✕</button>
+    <h2 class="panel-title">White Bag — Changelog</h2>
+    <ul class="changelog-list" id="changelog-list">
+      <li class="changelog-loading">fetching commits&hellip;</li>
+    </ul>
+    <a class="btn" href="https://github.com/programasalami/RealmDev/commits/main" target="_blank" rel="noopener">Full history on GitHub ↗</a>
+  </section>
+
+</div>
 
 <script type="module" src="js/scene.js"></script>
 </body>

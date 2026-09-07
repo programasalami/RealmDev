@@ -1,569 +1,522 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const gltfLoader = new GLTFLoader();
-
-const gameView = document.getElementById('game-view');
 const canvas = document.getElementById('scene-canvas');
-const loadingEl = document.getElementById('scene-loading');
-const fallbackEl = document.getElementById('scene-fallback');
-const joystickEl = document.getElementById('touch-joystick');
-const joystickBase = document.getElementById('joystick-base');
-const joystickKnob = document.getElementById('joystick-knob');
-const minimapCanvas = document.getElementById('minimap-canvas');
-const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+const tooltip = document.getElementById('tooltip');
+const loadingScreen = document.getElementById('loading-screen');
+const loadingBarFill = document.getElementById('loading-bar-fill');
 
-function supportsWebGL() {
-  try {
-    const c = document.createElement('canvas');
-    // failIfMajorPerformanceCaveat:false tells the browser we're fine with
-    // a software/blocklisted-driver fallback instead of refusing outright —
-    // without it, browsers silently return null on many older GPUs.
-    const attrs = { failIfMajorPerformanceCaveat: false };
-    return !!(
-      window.WebGLRenderingContext &&
-      (c.getContext('webgl', attrs) || c.getContext('experimental-webgl', attrs))
-    );
-  } catch (e) {
-    return false;
+const PIXEL_SCALE = 0.4; // render small, upscale with CSS pixelation for the retro look
+
+// ---------- loading manager ----------
+const manager = new THREE.LoadingManager();
+const MIN_LOADING_MS = 900;
+const loadStart = performance.now();
+let loadingDone = false;
+
+manager.onProgress = (_url, loaded, total) => {
+  const pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : 100;
+  loadingBarFill.style.width = pct + '%';
+};
+manager.onLoad = () => {
+  loadingDone = true;
+  const elapsed = performance.now() - loadStart;
+  const wait = Math.max(0, MIN_LOADING_MS - elapsed);
+  setTimeout(() => {
+    loadingBarFill.style.width = '100%';
+    loadingScreen.classList.add('hidden');
+  }, wait);
+};
+// Fallback in case something never fires onLoad (e.g. GLTF fetch stalls).
+setTimeout(() => {
+  if (!loadingDone) {
+    loadingBarFill.style.width = '100%';
+    loadingScreen.classList.add('hidden');
   }
+}, 9000);
+
+// ---------- pixel texture helpers ----------
+function makeTexture(size, draw) {
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d');
+  draw(ctx, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
-function markReady() {
-  if (window.__realmScene) window.__realmScene.ready = true;
-}
-
-function showFallback() {
-  loadingEl.hidden = true;
-  fallbackEl.hidden = false;
-  markReady();
-}
-
-// Catch-all: any uncaught exception or rejected promise anywhere in the
-// scene (not just inside init()'s own try/catch) falls back gracefully
-// instead of leaving a half-broken canvas, and gets logged so it's
-// actually diagnosable instead of a silent guess.
-window.addEventListener('error', (e) => {
-  console.error('[RealmDev scene] uncaught error:', e.error || e.message);
-  showFallback();
-});
-window.addEventListener('unhandledrejection', (e) => {
-  console.error('[RealmDev scene] unhandled rejection:', e.reason);
-  showFallback();
-});
-
-if (!supportsWebGL()) {
-  showFallback();
-} else {
-  init().catch((err) => {
-    console.error(err);
-    showFallback();
-  });
-}
-
-async function init() {
-  const GROUND_SIZE = 40;
-  const BOUNDS = GROUND_SIZE / 2 - 1.5;
-  const SKY = 0x4a4470; // brighter cozy dusk tone — visible and colorful, not blown out
-
-  const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: false,
-    powerPreference: 'default',
-    failIfMajorPerformanceCaveat: false,
-  });
-  // Old / integrated GPUs choke on high-DPI fill rate far more than on
-  // scene complexity, so don't scale the canvas up for retina displays.
-  renderer.setPixelRatio(1);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  canvas.addEventListener('webglcontextlost', (e) => {
-    e.preventDefault();
-    showFallback();
-  });
-
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, 34, 70);
-
-  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
-
-  // Bright but still moody: a strong key light casts real shadows for
-  // definition, kept in check by modest ambient/hemisphere fill so
-  // surfaces stay lit without flattening into a shadowless haze.
-  scene.add(new THREE.AmbientLight(0x5c5580, 0.55));
-  const sun = new THREE.DirectionalLight(0xffe6b8, 1.2);
-  sun.position.set(-14, 22, 10);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = -BOUNDS - 2;
-  sun.shadow.camera.right = BOUNDS + 2;
-  sun.shadow.camera.top = BOUNDS + 2;
-  sun.shadow.camera.bottom = -BOUNDS - 2;
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 60;
-  sun.shadow.bias = -0.002;
-  sun.shadow.normalBias = 0.05; // extra insurance against acne on grazing-angle wall faces
-  scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0x413a68, 0x201c33, 0.45));
-  // Ceiling-mounted lanterns (added in buildPerimeter) are the room's real
-  // light fixtures — no separate corner torches needed on top of those.
-
-  // ---------- ground ----------
-  const groundTex = makeCheckerTexture();
-  groundTex.repeat.set(GROUND_SIZE / 2, GROUND_SIZE / 2);
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
-    new THREE.MeshLambertMaterial({ map: groundTex })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  buildPerimeter(scene, GROUND_SIZE);
-
-  // ---------- player ----------
-  // `player` is the transform every other system (movement, camera, facing)
-  // drives; the actual model is loaded async and dropped in as its child so
-  // walking/camera-follow all work even before the model finishes loading.
-  const player = new THREE.Group();
-  player.position.set(0, 0, 11);
-  scene.add(player);
-  let mixer = null;
-  loadWizardModel(player, (m) => (mixer = m));
-
-  // ---------- input ----------
-  const keys = {};
-  const moveKeys = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
-
-  window.addEventListener('keydown', (e) => {
-    const k = e.key.toLowerCase();
-    if (moveKeys.has(k)) e.preventDefault();
-    keys[k] = true;
-  });
-  window.addEventListener('keyup', (e) => {
-    keys[e.key.toLowerCase()] = false;
-  });
-
-  const touchVec = { x: 0, y: 0 };
-  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  if (isTouch) {
-    joystickEl.hidden = false;
-    setupJoystick();
-  }
-
-  function setupJoystick() {
-    const radius = 44;
-    let activeId = null;
-    const center = () => {
-      const r = joystickBase.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    };
-    const move = (clientX, clientY) => {
-      const c = center();
-      let dx = clientX - c.x;
-      let dy = clientY - c.y;
-      const dist = Math.min(Math.hypot(dx, dy), radius);
-      const angle = Math.atan2(dy, dx);
-      dx = Math.cos(angle) * dist;
-      dy = Math.sin(angle) * dist;
-      joystickKnob.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
-      touchVec.x = dx / radius;
-      touchVec.y = dy / radius;
-    };
-    const reset = () => {
-      touchVec.x = 0;
-      touchVec.y = 0;
-      joystickKnob.style.transform = 'translate(-50%, -50%)';
-    };
-    joystickBase.addEventListener('pointerdown', (e) => {
-      activeId = e.pointerId;
-      joystickBase.setPointerCapture(activeId);
-      move(e.clientX, e.clientY);
-    });
-    joystickBase.addEventListener('pointermove', (e) => {
-      if (e.pointerId !== activeId) return;
-      move(e.clientX, e.clientY);
-    });
-    const end = (e) => {
-      if (e.pointerId !== activeId) return;
-      activeId = null;
-      reset();
-    };
-    joystickBase.addEventListener('pointerup', end);
-    joystickBase.addEventListener('pointercancel', end);
-  }
-
-  // ---------- drag to look around ----------
-  // Orbit the camera around the player on a sphere; yaw = 0 is "behind the
-  // player looking north", matching the initial fixed camera angle.
-  let camYaw = 0;
-  let camPitch = 0.94; // ~54 degrees, matches the original fixed top-down-behind angle
-  const MIN_PITCH = 0.35;
-  const MAX_PITCH = 1.4;
-  let dragId = null;
-  let lastX = 0;
-  let lastY = 0;
-
-  canvas.addEventListener('pointerdown', (e) => {
-    dragId = e.pointerId;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    canvas.setPointerCapture(dragId);
-  });
-  canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== dragId) return;
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    camYaw -= dx * 0.008;
-    camPitch = THREE.MathUtils.clamp(camPitch + dy * 0.006, MIN_PITCH, MAX_PITCH);
-  });
-  const endDrag = (e) => {
-    if (e.pointerId !== dragId) return;
-    dragId = null;
-  };
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', endDrag);
-
-  // ---------- resize ----------
-  function onResize() {
-    const w = gameView.clientWidth;
-    const h = gameView.clientHeight;
-    camera.aspect = w / Math.max(h, 1);
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
-  }
-  window.addEventListener('resize', onResize);
-  onResize();
-
-  // ---------- loop ----------
-  const clock = new THREE.Clock();
-  const camLookAhead = new THREE.Vector3();
-  const desiredCamPos = new THREE.Vector3();
-  const UP = new THREE.Vector3(0, 1, 0);
-  const tmpForward = new THREE.Vector3();
-  const tmpRight = new THREE.Vector3();
-  const tmpMove = new THREE.Vector3();
-
-  function updateMovement(delta) {
-    let ix = touchVec.x;
-    let iy = touchVec.y;
-    if (keys['a'] || keys['arrowleft']) ix -= 1;
-    if (keys['d'] || keys['arrowright']) ix += 1;
-    if (keys['w'] || keys['arrowup']) iy -= 1;
-    if (keys['s'] || keys['arrowdown']) iy += 1;
-
-    const len = Math.hypot(ix, iy);
-    if (len > 0.001) {
-      const nx = ix / Math.max(len, 1);
-      const ny = iy / Math.max(len, 1);
-
-      // Movement is relative to where the (drag-rotated) camera is looking,
-      // not fixed world axes — "forward" is whichever way the camera faces.
-      tmpForward.set(0, 0, -1).applyAxisAngle(UP, camYaw);
-      tmpRight.set(1, 0, 0).applyAxisAngle(UP, camYaw);
-      tmpMove.set(0, 0, 0).addScaledVector(tmpForward, -ny).addScaledVector(tmpRight, nx);
-
-      const speed = 6.5;
-      player.position.x += tmpMove.x * speed * delta;
-      player.position.z += tmpMove.z * speed * delta;
-      player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUNDS, BOUNDS);
-      player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUNDS, BOUNDS);
-      const facing = Math.atan2(tmpMove.x, tmpMove.z);
-      player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, facing, Math.min(delta * 12, 1));
-      player.userData.bob = (player.userData.bob || 0) + delta * 10;
-    } else {
-      player.userData.bob = 0;
+const floorTexture = makeTexture(16, (ctx, s) => {
+  const a = '#4a4358', b = '#3c3648', mortar = '#2a2534';
+  for (let y = 0; y < s; y += 8) {
+    for (let x = 0; x < s; x += 8) {
+      ctx.fillStyle = ((x / 8 + y / 8) % 2 === 0) ? a : b;
+      ctx.fillRect(x, y, 8, 8);
     }
-    const bobY = Math.abs(Math.sin(player.userData.bob || 0)) * 0.08;
-    player.position.y = bobY;
   }
-
-  const CAM_RADIUS = 13;
-  function camOffsetFromOrbit() {
-    return new THREE.Vector3(
-      CAM_RADIUS * Math.sin(camYaw) * Math.cos(camPitch),
-      CAM_RADIUS * Math.sin(camPitch),
-      CAM_RADIUS * Math.cos(camYaw) * Math.cos(camPitch)
-    );
+  ctx.fillStyle = mortar;
+  for (let i = 0; i <= s; i += 8) {
+    ctx.fillRect(0, i, s, 1);
+    ctx.fillRect(i, 0, 1, s);
   }
+});
+floorTexture.repeat.set(10, 10);
 
-  function updateCamera(delta) {
-    desiredCamPos.copy(player.position).add(camOffsetFromOrbit());
-    camera.position.lerp(desiredCamPos, 1 - Math.pow(0.0008, delta));
-    camLookAhead.copy(player.position).add(new THREE.Vector3(0, 1.4, 0));
-    camera.lookAt(camLookAhead);
+const rugTexture = makeTexture(16, (ctx, s) => {
+  ctx.fillStyle = '#5c1f2b';
+  ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#7a2c3a';
+  ctx.fillRect(2, 2, s - 4, s - 4);
+  ctx.fillStyle = '#e6c260';
+  ctx.fillRect(0, 0, s, 2);
+  ctx.fillRect(0, s - 2, s, 2);
+  ctx.fillRect(0, 0, 2, s);
+  ctx.fillRect(s - 2, 0, 2, s);
+});
+rugTexture.repeat.set(1, 1);
+
+const wallTexture = makeTexture(16, (ctx, s) => {
+  ctx.fillStyle = '#241f2e';
+  ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#332c40';
+  ctx.fillRect(0, 0, s, 7);
+  ctx.fillRect(0, 8, s, 7);
+  ctx.fillStyle = '#1a1622';
+  ctx.fillRect(0, 7, s, 1);
+  ctx.fillRect(0, 15, s, 1);
+  ctx.fillRect(0, 0, 1, 7);
+  ctx.fillRect(8, 8, 1, 7);
+});
+wallTexture.repeat.set(6, 2);
+
+// ---------- renderer / scene / camera ----------
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0810);
+scene.fog = new THREE.Fog(0x0d0810, 18, 34);
+
+const FRUSTUM = 9;
+let aspect = window.innerWidth / window.innerHeight;
+const camera = new THREE.OrthographicCamera(
+  -FRUSTUM * aspect, FRUSTUM * aspect, FRUSTUM, -FRUSTUM, 0.1, 100
+);
+const camDistance = 18;
+const camBase = new THREE.Vector3(camDistance, camDistance * 0.92, camDistance);
+camera.position.copy(camBase);
+camera.lookAt(0, 1.5, 0);
+
+const rig = new THREE.Group();
+scene.add(rig);
+
+// ---------- lighting: torch-lit vault ----------
+const ambient = new THREE.AmbientLight(0x39304f, 1.1);
+scene.add(ambient);
+
+const keyLight = new THREE.DirectionalLight(0xffb46b, 1.4);
+keyLight.position.set(6, 10, 4);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.left = -12;
+keyLight.shadow.camera.right = 12;
+keyLight.shadow.camera.top = 12;
+keyLight.shadow.camera.bottom = -12;
+keyLight.shadow.camera.far = 30;
+keyLight.shadow.bias = -0.0015;
+scene.add(keyLight);
+
+function makeTorch(x, z, rotY) {
+  const group = new THREE.Group();
+  const holder = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.08, 0.7, 6),
+    new THREE.MeshStandardMaterial({ color: 0x3b2a1c, roughness: 0.9 })
+  );
+  holder.position.y = 0.35;
+  holder.castShadow = true;
+  group.add(holder);
+
+  const flame = new THREE.Mesh(
+    new THREE.ConeGeometry(0.16, 0.36, 6),
+    new THREE.MeshStandardMaterial({ color: 0xffa23c, emissive: 0xff6a00, emissiveIntensity: 1.6, roughness: 0.4 })
+  );
+  flame.position.y = 0.9;
+  group.add(flame);
+
+  const light = new THREE.PointLight(0xff8a3c, 1.4, 7, 2);
+  light.position.y = 0.95;
+  group.add(light);
+
+  group.position.set(x, 0, z);
+  group.rotation.y = rotY;
+  group.userData.flame = flame;
+  group.userData.light = light;
+  group.userData.baseIntensity = 1.4;
+  return group;
+}
+
+const torches = [
+  makeTorch(-4.6, -4.6, Math.PI / 4),
+  makeTorch(4.6, -4.6, -Math.PI / 4),
+];
+torches.forEach((t) => rig.add(t));
+
+// ---------- room geometry ----------
+const ROOM = 10;
+
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(ROOM, ROOM),
+  new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.95 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+rig.add(floor);
+
+const rug = new THREE.Mesh(
+  new THREE.PlaneGeometry(4, 4),
+  new THREE.MeshStandardMaterial({ map: rugTexture, roughness: 0.85 })
+);
+rug.rotation.x = -Math.PI / 2;
+rug.position.y = 0.01;
+rig.add(rug);
+
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.95 });
+const wallHeight = 4.5;
+
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM, wallHeight), wallMat);
+backWall.position.set(0, wallHeight / 2, -ROOM / 2);
+backWall.receiveShadow = true;
+rig.add(backWall);
+
+const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM, wallHeight), wallMat);
+leftWall.rotation.y = Math.PI / 2;
+leftWall.position.set(-ROOM / 2, wallHeight / 2, 0);
+leftWall.receiveShadow = true;
+rig.add(leftWall);
+
+// ---------- interactive objects ----------
+const interactive = [];
+
+function registerInteractive(object, type, label) {
+  object.userData.type = type;
+  object.userData.label = label;
+  interactive.push(object);
+  rig.add(object);
+}
+
+// Vault Chest
+function buildChest() {
+  const group = new THREE.Group();
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x5b3a22, roughness: 0.8 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xd8ab3f, metalness: 0.6, roughness: 0.35, emissive: 0x3a2400, emissiveIntensity: 0.2 });
+
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.7, 0.9), woodMat);
+  base.position.y = 0.35;
+  base.castShadow = true;
+  group.add(base);
+
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.3, 8, 1, false, 0, Math.PI), woodMat);
+  lid.rotation.z = Math.PI / 2;
+  lid.scale.set(1, 0.7, 1);
+  lid.position.y = 0.72;
+  lid.castShadow = true;
+  group.add(lid);
+
+  const band = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.1, 0.94), goldMat);
+  band.position.y = 0.35;
+  group.add(band);
+
+  const lock = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.1), goldMat);
+  lock.position.set(0, 0.55, 0.48);
+  group.add(lock);
+
+  group.position.set(-2.6, 0, 1.8);
+  group.rotation.y = 0.5;
+  return group;
+}
+const chest = buildChest();
+registerInteractive(chest, 'chest', 'The Vault Chest — Forums');
+
+// Nexus Portal
+function buildPortal() {
+  const group = new THREE.Group();
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x2a1f40, emissive: 0x6a3fd6, emissiveIntensity: 0.5, roughness: 0.5 });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.16, 12, 24), ringMat);
+  ring.castShadow = true;
+  group.add(ring);
+
+  const innerMat = new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+  const inner = new THREE.Mesh(new THREE.CircleGeometry(1.0, 24), innerMat);
+  group.add(inner);
+
+  const light = new THREE.PointLight(0x7fe3ff, 1.2, 6, 2);
+  light.position.z = 0.4;
+  group.add(light);
+
+  group.userData.ring = ring;
+  group.userData.inner = inner;
+  group.position.set(0, 1.3, -3.6);
+  return group;
+}
+const portal = buildPortal();
+registerInteractive(portal, 'portal', 'The Nexus Portal — Warriors & Wizards');
+
+// White Bag
+function buildBag() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf1ece0, emissive: 0xffffff, emissiveIntensity: 0.15, roughness: 0.6 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), mat);
+  body.scale.set(1, 0.85, 1);
+  body.castShadow = true;
+  group.add(body);
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.035, 6, 10), new THREE.MeshStandardMaterial({ color: 0xc9a24a }));
+  tie.position.y = 0.26;
+  tie.rotation.x = Math.PI / 2;
+  group.add(tie);
+
+  const glow = new THREE.PointLight(0xffffff, 0.6, 3, 2);
+  group.add(glow);
+
+  group.position.set(2.7, 0.5, 2.0);
+  group.userData.baseY = 0.5;
+  return group;
+}
+const bag = buildBag();
+registerInteractive(bag, 'bag', 'White Bag — Changelog');
+
+// Guill, the Guild Hall Assistant — GLTF with a low-poly fallback
+function buildFallbackNpc() {
+  const group = new THREE.Group();
+  const robeMat = new THREE.MeshStandardMaterial({ color: 0x3b5f8a, roughness: 0.8 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0b48a, roughness: 0.7 });
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.1, 8), robeMat);
+  body.position.y = 0.65;
+  body.castShadow = true;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), skinMat);
+  head.position.y = 1.3;
+  head.castShadow = true;
+  group.add(head);
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 8), robeMat);
+  hat.position.y = 1.65;
+  group.add(hat);
+  return group;
+}
+
+const npcGroup = new THREE.Group();
+npcGroup.position.set(3.1, 0, -2.4);
+npcGroup.rotation.y = -0.6;
+registerInteractive(npcGroup, 'npc', 'Guill — Credits');
+
+const gltfLoader = new GLTFLoader(manager);
+gltfLoader.load(
+  'assets/wizard.glb',
+  (gltf) => {
+    const model = gltf.scene;
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const targetHeight = 1.7;
+    const scale = size.y > 0 ? targetHeight / size.y : 1;
+    model.scale.setScalar(scale);
+    model.traverse((child) => {
+      if (child.isMesh) child.castShadow = true;
+    });
+    npcGroup.add(model);
+  },
+  undefined,
+  () => {
+    npcGroup.add(buildFallbackNpc());
   }
+);
 
-  camera.position.copy(player.position).add(camOffsetFromOrbit());
+// ---------- torch flicker + idle animation ----------
+const clock = new THREE.Clock();
 
-  function animate() {
-    const delta = Math.min(clock.getDelta(), 0.05);
-    updateMovement(delta);
-    updateCamera(delta);
-    if (mixer) mixer.update(delta);
-    drawMinimap();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  }
+function animate() {
+  const t = clock.getElapsedTime();
 
-  function drawMinimap() {
-    if (!minimapCtx) return;
-    const w = minimapCanvas.width;
-    const h = minimapCanvas.height;
-    minimapCtx.fillStyle = '#1a1a20';
-    minimapCtx.fillRect(0, 0, w, h);
+  torches.forEach((torch, i) => {
+    const flicker = Math.sin(t * 9 + i * 3) * 0.15 + Math.sin(t * 23 + i) * 0.08;
+    torch.userData.light.intensity = torch.userData.baseIntensity + flicker;
+    torch.userData.flame.scale.y = 1 + Math.sin(t * 14 + i) * 0.08;
+  });
 
-    // world bounds map to the minimap square, keeping aspect via the smaller dimension
-    const pad = 8;
-    const mapSize = Math.min(w, h) - pad * 2;
-    const originX = (w - mapSize) / 2;
-    const originY = (h - mapSize) / 2;
-    minimapCtx.strokeStyle = '#5a5a66';
-    minimapCtx.lineWidth = 1;
-    minimapCtx.strokeRect(originX, originY, mapSize, mapSize);
+  portal.userData.ring.rotation.z = t * 0.4;
+  portal.userData.inner.rotation.z = -t * 0.7;
+  portal.userData.inner.material.opacity = 0.45 + Math.sin(t * 2) * 0.1;
 
-    const nx = (player.position.x + BOUNDS) / (BOUNDS * 2);
-    const nz = (player.position.z + BOUNDS) / (BOUNDS * 2);
-    const dotX = originX + nx * mapSize;
-    const dotY = originY + nz * mapSize;
+  bag.position.y = bag.userData.baseY + Math.sin(t * 2.2) * 0.08;
+  bag.rotation.y = t * 0.8;
 
-    minimapCtx.fillStyle = '#ffcc4d';
-    minimapCtx.beginPath();
-    minimapCtx.arc(dotX, dotY, 4, 0, Math.PI * 2);
-    minimapCtx.fill();
-  }
+  npcGroup.rotation.y = -0.6 + Math.sin(t * 0.5) * 0.08;
 
-  loadingEl.hidden = true;
-  fallbackEl.hidden = true; // success always wins, even if the watchdog already fired
-  markReady();
+  const targetTiltX = pointerNorm.y * 0.05;
+  const targetTiltY = pointerNorm.x * 0.08;
+  rig.rotation.x += (targetTiltX - rig.rotation.x) * 0.04;
+  rig.rotation.y += (targetTiltY - rig.rotation.y) * 0.04;
+
+  renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
 
-// ---------------- builders ----------------
+// ---------- pointer interaction: hover tooltip + click ----------
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2(-10, -10);
+const pointerNorm = new THREE.Vector2(0, 0);
+let lastClientX = 0, lastClientY = 0;
+let hovered = null;
 
-function makeCheckerTexture() {
-  const size = 64;
-  const cvs = document.createElement('canvas');
-  cvs.width = cvs.height = size;
-  const ctx = cvs.getContext('2d');
-  const tones = ['#d8d3c8', '#c7c1b3'];
-  const tile = size / 4;
-  for (let y = 0; y < 4; y++) {
-    for (let x = 0; x < 4; x++) {
-      ctx.fillStyle = tones[(x + y) % 2];
-      ctx.fillRect(x * tile, y * tile, tile, tile);
-    }
-  }
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+function setPointerFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  lastClientX = e.clientX;
+  lastClientY = e.clientY;
+  pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  pointerNorm.x = pointerNDC.x;
+  pointerNorm.y = pointerNDC.y;
 }
 
-function stoneMaterial(color) {
-  return new THREE.MeshLambertMaterial({ color, flatShading: true });
+function pickInteractive() {
+  raycaster.setFromCamera(pointerNDC, camera);
+  const meshes = [];
+  interactive.forEach((obj) => obj.traverse((c) => { if (c.isMesh) meshes.push(c); }));
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (!hits.length) return null;
+  return interactive.find((obj) => {
+    let found = false;
+    obj.traverse((c) => { if (c === hits[0].object) found = true; });
+    return found;
+  }) || null;
 }
 
-// Blocky brick/stone texture with per-block tone variation, built from a
-// base color, so walls read as textured masonry instead of flat plastic.
-function makeBrickTexture(baseHex, { rows = 6, cols = 6, variance = 18 } = {}) {
-  const size = 128;
-  const cvs = document.createElement('canvas');
-  cvs.width = cvs.height = size;
-  const ctx = cvs.getContext('2d');
-  const base = new THREE.Color(baseHex);
-  const tileW = size / cols;
-  const tileH = size / rows;
-  for (let r = 0; r < rows; r++) {
-    const offset = (r % 2) * (tileW / 2);
-    for (let c = -1; c <= cols; c++) {
-      const shade = 1 + (Math.random() - 0.5) * (variance / 100);
-      ctx.fillStyle = `rgb(${Math.min(255, base.r * 255 * shade) | 0}, ${Math.min(255, base.g * 255 * shade) | 0}, ${Math.min(255, base.b * 255 * shade) | 0})`;
-      ctx.fillRect(c * tileW + offset, r * tileH, tileW - 3, tileH - 3);
-    }
-  }
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function brickMaterial(baseHex, repeatX = 3, repeatY = 3, opts) {
-  const tex = makeBrickTexture(baseHex, opts);
-  tex.repeat.set(repeatX, repeatY);
-  return new THREE.MeshLambertMaterial({ map: tex, flatShading: true });
-}
-
-function bannerMaterial(hex) {
-  return new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide });
-}
-
-function castAndReceive(mesh) {
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-function buildPerimeter(scene, groundSize) {
-  const bounds = groundSize / 2;
-
-  // Single stone material for every structural surface (walls, facade,
-  // towers, merlons) so the room reads as one consistent material.
-  const wallMat = brickMaterial(0xcbb48a, 10, 7); // warm sandstone, textured
-  const roofBlue = stoneMaterial(0x3f6fb0);
-  const merlonMat = brickMaterial(0xb7a17c, 1, 1);
-
-  // enclosing walls on all 4 sides — everything else below is decoration
-  // layered against these, but this guarantees a fully closed-in room
-  // regardless of gaps between the decorative buildings/towers.
-  const WALL_HEIGHT = 30;
-  const WALL_THICK = 1;
-  // NS walls span the full width (and thus own the 4 corners); EW walls are
-  // shortened to fit exactly between them so the two never occupy the same
-  // space — that overlap was causing z-fighting ("smoke") at the corners,
-  // worst from a distance where depth-buffer precision is coarsest.
-  const nsWallGeo = new THREE.BoxGeometry(groundSize, WALL_HEIGHT, WALL_THICK);
-  const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize - WALL_THICK);
-  [-1, 1].forEach((side) => {
-    const wallNS = castAndReceive(new THREE.Mesh(nsWallGeo, wallMat));
-    wallNS.position.set(0, WALL_HEIGHT / 2, side * bounds);
-    scene.add(wallNS);
-    const wallEW = castAndReceive(new THREE.Mesh(ewWallGeo, wallMat));
-    wallEW.position.set(side * bounds, WALL_HEIGHT / 2, 0);
-    scene.add(wallEW);
-
-    // crenellations along the top edge for a proper castle-wall silhouette.
-    // Inset from the exact corner so the NS and EW rows below never place
-    // a merlon at the same spot (that duplicate/overlapping geometry was
-    // causing a flickering "smoke" artifact right at the corners).
-    for (let x = -bounds + 1.5; x <= bounds - 1.5; x += 3) {
-      const merlonNS = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, WALL_THICK + 0.4), merlonMat));
-      merlonNS.position.set(x, WALL_HEIGHT + 0.8, side * bounds);
-      scene.add(merlonNS);
-      const merlonEW = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(WALL_THICK + 0.4, 1.6, 1.4), merlonMat));
-      merlonEW.position.set(side * bounds, WALL_HEIGHT + 0.8, x);
-      scene.add(merlonEW);
+function setHoverEmissive(obj, on) {
+  obj.traverse((c) => {
+    if (c.isMesh && c.material && 'emissiveIntensity' in c.material) {
+      c.userData._baseEmissive = c.userData._baseEmissive ?? c.material.emissiveIntensity;
+      c.material.emissiveIntensity = on ? c.userData._baseEmissive + 0.8 : c.userData._baseEmissive;
     }
   });
+}
 
-  // colorful banners hanging at intervals along the walls
-  const bannerColors = [0xffcc4d, 0xa06cff, 0x39c2a0];
-  [-1, 1].forEach((side) => {
-    [-bounds + 3, -6, 0, 6, bounds - 3].forEach((x, i) => {
-      const banner = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.6, 3.4),
-        bannerMaterial(bannerColors[i % bannerColors.length])
-      );
-      banner.position.set(x, 7, side * bounds - side * 0.6);
-      banner.rotation.y = side > 0 ? Math.PI : 0;
-      scene.add(banner);
+window.addEventListener('pointermove', (e) => {
+  setPointerFromEvent(e);
+  const hit = pickInteractive();
+  if (hit !== hovered) {
+    if (hovered) setHoverEmissive(hovered, false);
+    hovered = hit;
+    if (hovered) {
+      setHoverEmissive(hovered, true);
+      tooltip.textContent = hovered.userData.label;
+      tooltip.hidden = false;
+      canvas.style.cursor = 'pointer';
+    } else {
+      tooltip.hidden = true;
+      canvas.style.cursor = 'grab';
+    }
+  }
+  if (hovered) {
+    tooltip.style.left = lastClientX + 'px';
+    tooltip.style.top = lastClientY + 'px';
+  }
+});
+
+window.addEventListener('click', (e) => {
+  if (e.target !== canvas) return;
+  setPointerFromEvent(e);
+  const hit = pickInteractive();
+  if (hit) handleInteract(hit.userData.type);
+});
+
+// ---------- interactions ----------
+const overlay = document.getElementById('panel-overlay');
+const panels = {
+  portal: document.getElementById('panel-portal'),
+  npc: document.getElementById('panel-credits'),
+  bag: document.getElementById('panel-changelog'),
+};
+
+function openPanel(key) {
+  overlay.hidden = false;
+  Object.values(panels).forEach((p) => (p.hidden = true));
+  panels[key].hidden = false;
+}
+function closeOverlay() {
+  overlay.hidden = true;
+  Object.values(panels).forEach((p) => (p.hidden = true));
+}
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) closeOverlay();
+});
+document.querySelectorAll('[data-close]').forEach((btn) => btn.addEventListener('click', closeOverlay));
+
+let changelogLoaded = false;
+async function loadChangelog() {
+  if (changelogLoaded) return;
+  changelogLoaded = true;
+  const list = document.getElementById('changelog-list');
+  try {
+    const res = await fetch('https://api.github.com/repos/programasalami/RealmDev/commits?per_page=8');
+    if (!res.ok) throw new Error('bad response');
+    const commits = await res.json();
+    list.innerHTML = '';
+    commits.forEach((c) => {
+      const li = document.createElement('li');
+      const date = new Date(c.commit.author.date).toLocaleDateString();
+      const msg = c.commit.message.split('\n')[0];
+      li.innerHTML = `<a href="${c.html_url}" target="_blank" rel="noopener">${escapeHtml(msg)}</a><br>
+        <span class="changelog-sha">${c.sha.slice(0, 7)} · ${date}</span>`;
+      list.appendChild(li);
     });
-  });
-
-  // back castle facade
-  const facade = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(22, 14, 1.5), wallMat));
-  facade.position.set(0, 7, -bounds);
-  scene.add(facade);
-
-  const keep = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(7, 20, 1.5), wallMat));
-  keep.position.set(0, 10, -bounds - 0.2);
-  scene.add(keep);
-
-  [-1, 1].forEach((side) => {
-    const tower = castAndReceive(new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.5, 18, 10), wallMat));
-    tower.position.set(side * 10, 9, -bounds);
-    scene.add(tower);
-    const cone = castAndReceive(new THREE.Mesh(new THREE.ConeGeometry(2.8, 4.5, 10), roofBlue));
-    cone.position.set(side * 10, 20.25, -bounds);
-    scene.add(cone);
-  });
-
-  // ceiling — fully seals the room top, and gives the hanging lanterns
-  // below something to be mounted to.
-  const ceiling = new THREE.Mesh(
-    new THREE.PlaneGeometry(groundSize, groundSize),
-    stoneMaterial(0x8a7a5c)
-  );
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.y = WALL_HEIGHT;
-  ceiling.receiveShadow = true;
-  scene.add(ceiling);
-
-  // hardcoded hanging lanterns — the room's real light sources, rather than
-  // relying on a sun-like light shining into a sealed building. A plus-shaped
-  // layout gives even coverage across the room without piling up too many
-  // real-time point lights (costly on weaker/older GPUs).
-  const lanternGlow = new THREE.MeshLambertMaterial({ color: 0xffcc80, emissive: 0xffaa40, emissiveIntensity: 1.5 });
-  const chainMat = stoneMaterial(0x2a2a2a);
-  const lanternSpots = [
-    [0, 0],
-    [-14, 0],
-    [14, 0],
-    [0, -14],
-    [0, 14],
-  ];
-  lanternSpots.forEach(([x, z]) => {
-    const dropY = WALL_HEIGHT - 4;
-    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4, 6), chainMat);
-    chain.position.set(x, WALL_HEIGHT - 2, z);
-    scene.add(chain);
-    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), lanternGlow);
-    lantern.position.set(x, dropY, z);
-    scene.add(lantern);
-    const light = new THREE.PointLight(0xffb866, 1.4, 24, 2);
-    light.position.set(x, dropY, z);
-    scene.add(light);
-  });
+  } catch (err) {
+    list.innerHTML = '<li class="changelog-error">Could not load commits right now — see the full history on GitHub below.</li>';
+  }
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
 
-// Loads assets/wizard.glb into `target`, auto-scaling it to a consistent
-// height and sitting its base on the ground regardless of how it was
-// modeled/exported. Calls onMixer(mixer) if the model has animations.
-function loadWizardModel(target, onMixer) {
-  const TARGET_HEIGHT = 1.7;
-  gltfLoader.load(
-    'assets/wizard.glb',
-    (gltf) => {
-      const model = gltf.scene;
-
-      const box = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
-      model.scale.setScalar(scale);
-
-      // Re-measure after scaling, then shift so the model's feet sit at y=0
-      // and it's centered on X/Z, regardless of the model's own pivot point.
-      const scaledBox = new THREE.Box3().setFromObject(model);
-      const center = new THREE.Vector3();
-      scaledBox.getCenter(center);
-      model.position.x -= center.x;
-      model.position.z -= center.z;
-      model.position.y -= scaledBox.min.y;
-
-      model.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-
-      target.add(model);
-
-      if (gltf.animations && gltf.animations.length) {
-        const mixer = new THREE.AnimationMixer(model);
-        mixer.clipAction(gltf.animations[0]).play();
-        onMixer(mixer);
-      }
-    },
-    undefined,
-    (err) => console.error('Failed to load wizard.glb', err)
-  );
+function handleInteract(type) {
+  if (type === 'chest') {
+    window.location.href = 'https://forum.realmdev.org';
+    return;
+  }
+  if (type === 'portal') {
+    openPanel('portal');
+    return;
+  }
+  if (type === 'npc') {
+    openPanel('npc');
+    return;
+  }
+  if (type === 'bag') {
+    openPanel('bag');
+    loadChangelog();
+  }
 }
+
+// ---------- resize ----------
+function onResize() {
+  aspect = window.innerWidth / window.innerHeight;
+  camera.left = -FRUSTUM * aspect;
+  camera.right = FRUSTUM * aspect;
+  camera.top = FRUSTUM;
+  camera.bottom = -FRUSTUM;
+  camera.updateProjectionMatrix();
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  const w = Math.max(1, Math.round(window.innerWidth * PIXEL_SCALE));
+  const h = Math.max(1, Math.round(window.innerHeight * PIXEL_SCALE));
+  renderer.setSize(w, h, false);
+}
+window.addEventListener('resize', onResize);
+onResize();
+
+animate();
