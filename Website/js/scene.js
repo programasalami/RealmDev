@@ -229,10 +229,10 @@ function buildChest() {
 }
 
 const CHESTS = [
-  { x: -3.6, type: 'forum', label: 'Vault Chest — Forums' },
-  { x: -1.2, type: 'portal', label: 'Vault Chest — Warriors & Wizards' },
-  { x: 1.2, type: 'team', label: 'Vault Chest — RealmDev Team' },
-  { x: 3.6, type: 'log', label: 'Vault Chest — Update Log' },
+  { x: -3.6, type: 'forum', label: 'Forums' },
+  { x: -1.2, type: 'portal', label: 'Warriors & Wizards' },
+  { x: 1.2, type: 'team', label: 'RealmDev Team' },
+  { x: 3.6, type: 'log', label: 'RealmDev Update Log' },
 ];
 
 CHESTS.forEach(({ x, type, label }) => {

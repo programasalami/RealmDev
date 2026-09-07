@@ -65,7 +65,6 @@ html, body {
   width: 88px;
   height: 88px;
   object-fit: contain;
-  image-rendering: pixelated;
   margin-bottom: 12px;
   filter: drop-shadow(0 0 10px rgba(230,194,96,0.5));
 }
@@ -141,14 +140,6 @@ html, body {
   width: 36px;
   height: 36px;
   object-fit: contain;
-  image-rendering: pixelated;
-}
-.header-hint {
-  font-size: 16px;
-  color: #cbb9e0;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  margin: 0;
 }
 
 /* ---------- tooltip ---------- */
@@ -220,7 +211,6 @@ html, body {
   max-height: 100px;
   object-fit: contain;
   margin: 0 0 16px;
-  image-rendering: pixelated;
 }
 .portal-frame-wrap {
   border: 2px solid var(--gold-dark);
@@ -247,7 +237,6 @@ html, body {
   width: 48px;
   height: 48px;
   object-fit: contain;
-  image-rendering: pixelated;
   opacity: 0.85;
 }
 .portal-frame-fallback p {
@@ -313,6 +302,5 @@ html, body {
 
 @media (max-width: 560px) {
   body { font-size: 17px; }
-  .header-hint { display: none; }
   .panel { padding: 30px 18px 20px; }
 }
