@@ -1,13 +1,15 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
 
-const root = document.getElementById('scene-root');
+const gameView = document.getElementById('game-view');
 const canvas = document.getElementById('scene-canvas');
 const loadingEl = document.getElementById('scene-loading');
-const hintEl = document.getElementById('scene-hint');
 const fallbackEl = document.getElementById('scene-fallback');
 const joystickEl = document.getElementById('touch-joystick');
 const joystickBase = document.getElementById('joystick-base');
 const joystickKnob = document.getElementById('joystick-knob');
+const minimapCanvas = document.getElementById('minimap-canvas');
+const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
 
 function supportsWebGL() {
   try {
@@ -45,18 +47,6 @@ if (!supportsWebGL()) {
 }
 
 async function init() {
-  // Best-effort: get the pixel font ready before drawing portal labels, but
-  // never let this block startup — document.fonts.load() has been known to
-  // hang indefinitely (never resolve or reject) in some browsers.
-  try {
-    await Promise.race([
-      document.fonts.load('40px "Press Start 2P"'),
-      new Promise((resolve) => setTimeout(resolve, 800)),
-    ]);
-  } catch (e) {
-    /* labels just fall back to default font */
-  }
-
   const GROUND_SIZE = 40;
   const BOUNDS = GROUND_SIZE / 2 - 1.5;
   const SKY = 0x7ec9ec;
@@ -80,7 +70,6 @@ async function init() {
   scene.fog = new THREE.Fog(SKY, 22, 46);
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
-  const camOffset = new THREE.Vector3(0, 11, 8);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.7));
   const sun = new THREE.DirectionalLight(0xfff3d6, 0.85);
@@ -100,51 +89,24 @@ async function init() {
 
   buildPerimeter(scene, GROUND_SIZE);
 
-  // ---------- portals ----------
-  const portalMeshes = [];
-  const portals = [
-    createPortal({
-      color: 0x39e6c2,
-      label: 'FORUMS',
-      position: new THREE.Vector3(-7.5, 0, -BOUNDS + 2.2),
-      url: 'https://forum.realmdev.org',
-      external: true,
-    }),
-    createPortal({
-      color: 0xa06cff,
-      label: 'DEVELOPERS',
-      position: new THREE.Vector3(7.5, 0, -BOUNDS + 2.2),
-      url: '/developers',
-      external: false,
-    }),
-  ];
-  portals.forEach((p) => {
-    scene.add(p.group);
-    p.group.traverse((child) => {
-      if (child.isMesh) {
-        child.userData.portal = p;
-        portalMeshes.push(child);
-      }
-    });
-  });
-
   // ---------- player ----------
-  const player = createPlayer();
+  // `player` is the transform every other system (movement, camera, facing)
+  // drives; the actual model is loaded async and dropped in as its child so
+  // walking/camera-follow all work even before the model finishes loading.
+  const player = new THREE.Group();
   player.position.set(0, 0, 11);
   scene.add(player);
+  let mixer = null;
+  loadWizardModel(player, (m) => (mixer = m));
 
   // ---------- input ----------
   const keys = {};
   const moveKeys = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
-  let activePortal = null;
 
   window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (moveKeys.has(k)) e.preventDefault();
     keys[k] = true;
-    if (k === 'e' || k === ' ') {
-      if (activePortal) enterPortal(activePortal);
-    }
   });
   window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
@@ -199,30 +161,43 @@ async function init() {
     joystickBase.addEventListener('pointercancel', end);
   }
 
-  // tap / click a portal to jump straight to it
-  const raycaster = new THREE.Raycaster();
-  const pointerNDC = new THREE.Vector2();
-  canvas.addEventListener('pointerdown', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(pointerNDC, camera);
-    const hits = raycaster.intersectObjects(portalMeshes, false);
-    if (hits.length) enterPortal(hits[0].object.userData.portal);
-  });
+  // ---------- drag to look around ----------
+  // Orbit the camera around the player on a sphere; yaw = 0 is "behind the
+  // player looking north", matching the initial fixed camera angle.
+  let camYaw = 0;
+  let camPitch = 0.94; // ~54 degrees, matches the original fixed top-down-behind angle
+  const MIN_PITCH = 0.35;
+  const MAX_PITCH = 1.4;
+  let dragId = null;
+  let lastX = 0;
+  let lastY = 0;
 
-  function enterPortal(portal) {
-    if (portal.external) {
-      window.open(portal.url, '_blank', 'noopener');
-    } else {
-      window.location.href = portal.url;
-    }
-  }
+  canvas.addEventListener('pointerdown', (e) => {
+    dragId = e.pointerId;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture(dragId);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== dragId) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    camYaw -= dx * 0.008;
+    camPitch = THREE.MathUtils.clamp(camPitch + dy * 0.006, MIN_PITCH, MAX_PITCH);
+  });
+  const endDrag = (e) => {
+    if (e.pointerId !== dragId) return;
+    dragId = null;
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
 
   // ---------- resize ----------
   function onResize() {
-    const w = root.clientWidth;
-    const h = root.clientHeight;
+    const w = gameView.clientWidth;
+    const h = gameView.clientHeight;
     camera.aspect = w / Math.max(h, 1);
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
@@ -232,7 +207,6 @@ async function init() {
 
   // ---------- loop ----------
   const clock = new THREE.Clock();
-  let elapsed = 0;
   let facing = 0;
   const camLookAhead = new THREE.Vector3();
   const desiredCamPos = new THREE.Vector3();
@@ -264,39 +238,63 @@ async function init() {
     player.position.y = bobY;
   }
 
-  function updatePortals(delta) {
-    activePortal = null;
-    portals.forEach((p) => {
-      p.ring.rotation.z += delta * 0.6;
-      const pulse = 0.75 + Math.sin(elapsed * 2.4 + p.seed) * 0.15;
-      p.disc.material.opacity = pulse;
-      const dist = player.position.distanceTo(p.group.position);
-      if (dist < 2.6) activePortal = p;
-    });
+  const CAM_RADIUS = 13;
+  function camOffsetFromOrbit() {
+    return new THREE.Vector3(
+      CAM_RADIUS * Math.sin(camYaw) * Math.cos(camPitch),
+      CAM_RADIUS * Math.sin(camPitch),
+      CAM_RADIUS * Math.cos(camYaw) * Math.cos(camPitch)
+    );
   }
 
   function updateCamera(delta) {
-    desiredCamPos.copy(player.position).add(camOffset);
+    desiredCamPos.copy(player.position).add(camOffsetFromOrbit());
     camera.position.lerp(desiredCamPos, 1 - Math.pow(0.0008, delta));
-    camLookAhead.copy(player.position).add(new THREE.Vector3(0, 1.4, -3));
+    camLookAhead.copy(player.position).add(new THREE.Vector3(0, 1.4, 0));
     camera.lookAt(camLookAhead);
   }
 
-  camera.position.copy(player.position).add(camOffset);
+  camera.position.copy(player.position).add(camOffsetFromOrbit());
 
   function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
-    elapsed += delta;
     updateMovement(delta);
-    updatePortals(delta);
     updateCamera(delta);
+    if (mixer) mixer.update(delta);
+    drawMinimap();
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
 
+  function drawMinimap() {
+    if (!minimapCtx) return;
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    minimapCtx.fillStyle = '#1a1a20';
+    minimapCtx.fillRect(0, 0, w, h);
+
+    // world bounds map to the minimap square, keeping aspect via the smaller dimension
+    const pad = 8;
+    const mapSize = Math.min(w, h) - pad * 2;
+    const originX = (w - mapSize) / 2;
+    const originY = (h - mapSize) / 2;
+    minimapCtx.strokeStyle = '#5a5a66';
+    minimapCtx.lineWidth = 1;
+    minimapCtx.strokeRect(originX, originY, mapSize, mapSize);
+
+    const nx = (player.position.x + BOUNDS) / (BOUNDS * 2);
+    const nz = (player.position.z + BOUNDS) / (BOUNDS * 2);
+    const dotX = originX + nx * mapSize;
+    const dotY = originY + nz * mapSize;
+
+    minimapCtx.fillStyle = '#ffcc4d';
+    minimapCtx.beginPath();
+    minimapCtx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+    minimapCtx.fill();
+  }
+
   loadingEl.hidden = true;
   fallbackEl.hidden = true; // success always wins, even if the watchdog already fired
-  hintEl.hidden = false;
   markReady();
   requestAnimationFrame(animate);
 }
@@ -382,129 +380,42 @@ function buildPerimeter(scene, groundSize) {
   }
 }
 
-function makeLabelTexture(text, color) {
-  const cvs = document.createElement('canvas');
-  cvs.width = 512;
-  cvs.height = 128;
-  const ctx = cvs.getContext('2d');
-  ctx.clearRect(0, 0, cvs.width, cvs.height);
-  ctx.font = '40px "Press Start 2P", monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(13,11,26,0.7)';
-  ctx.fillRect(0, 30, cvs.width, 68);
-  ctx.fillStyle = color;
-  ctx.fillText(text, cvs.width / 2, 64);
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+const gltfLoader = new GLTFLoader();
 
-function createPortal({ color, label, position, url, external }) {
-  const group = new THREE.Group();
-  group.position.copy(position);
+// Loads assets/wizard.glb into `target`, auto-scaling it to a consistent
+// height and sitting its base on the ground regardless of how it was
+// modeled/exported. Calls onMixer(mixer) if the model has animations.
+function loadWizardModel(target, onMixer) {
+  const TARGET_HEIGHT = 1.7;
+  gltfLoader.load(
+    'assets/wizard.glb',
+    (gltf) => {
+      const model = gltf.scene;
 
-  const stone = stoneMaterial(0xb8b3a6);
-  const pillarGeo = new THREE.BoxGeometry(0.6, 3.2, 0.6);
-  const pillarL = new THREE.Mesh(pillarGeo, stone);
-  pillarL.position.set(-1.3, 1.6, 0);
-  const pillarR = new THREE.Mesh(pillarGeo, stone);
-  pillarR.position.set(1.3, 1.6, 0);
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.6, 0.7), stone);
-  lintel.position.set(0, 3.5, 0);
-  group.add(pillarL, pillarR, lintel);
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
+      model.scale.setScalar(scale);
 
-  const discTex = makeRadialTexture(color);
-  const discMat = new THREE.MeshBasicMaterial({
-    map: discTex,
-    transparent: true,
-    opacity: 0.85,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.05, 32), discMat);
-  disc.position.set(0, 1.75, 0);
-  group.add(disc);
+      // Re-measure after scaling, then shift so the model's feet sit at y=0
+      // and it's centered on X/Z, regardless of the model's own pivot point.
+      const scaledBox = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      scaledBox.getCenter(center);
+      model.position.x -= center.x;
+      model.position.z -= center.z;
+      model.position.y -= scaledBox.min.y;
 
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(1.15, 0.07, 8, 24),
-    new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 1.2 })
+      target.add(model);
+
+      if (gltf.animations && gltf.animations.length) {
+        const mixer = new THREE.AnimationMixer(model);
+        mixer.clipAction(gltf.animations[0]).play();
+        onMixer(mixer);
+      }
+    },
+    undefined,
+    (err) => console.error('Failed to load wizard.glb', err)
   );
-  ring.position.copy(disc.position);
-  group.add(ring);
-
-  const labelTex = makeLabelTexture(label, '#ffcc4d');
-  const labelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
-  labelSprite.scale.set(3.2, 0.8, 1);
-  labelSprite.position.set(0, 4.5, 0);
-  group.add(labelSprite);
-
-  const portal = { group, disc, ring, url, external, seed: Math.random() * 10 };
-  return portal;
-}
-
-function makeRadialTexture(color) {
-  const cvs = document.createElement('canvas');
-  cvs.width = cvs.height = 128;
-  const ctx = cvs.getContext('2d');
-  const c = new THREE.Color(color);
-  const hex = `#${c.getHexString()}`;
-  const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.35, hex);
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 128, 128);
-  return new THREE.CanvasTexture(cvs);
-}
-
-function createPlayer() {
-  const group = new THREE.Group();
-
-  const robe = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.5, 1.1, 8),
-    new THREE.MeshLambertMaterial({ color: 0x5b3fd6, flatShading: true })
-  );
-  robe.position.y = 0.75;
-  group.add(robe);
-
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.26, 10, 8),
-    new THREE.MeshLambertMaterial({ color: 0xe7b98c, flatShading: true })
-  );
-  head.position.y = 1.5;
-  group.add(head);
-
-  const hat = new THREE.Mesh(
-    new THREE.ConeGeometry(0.36, 0.65, 8),
-    new THREE.MeshLambertMaterial({ color: 0x3d2a99, flatShading: true })
-  );
-  hat.position.y = 1.95;
-  group.add(hat);
-
-  const hatBand = new THREE.Mesh(
-    new THREE.TorusGeometry(0.3, 0.04, 6, 12),
-    new THREE.MeshLambertMaterial({ color: 0xffcc4d, flatShading: true })
-  );
-  hatBand.rotation.x = Math.PI / 2;
-  hatBand.position.y = 1.68;
-  group.add(hatBand);
-
-  const staff = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6),
-    new THREE.MeshLambertMaterial({ color: 0x8a5a2b, flatShading: true })
-  );
-  staff.position.set(0.45, 0.85, 0.1);
-  staff.rotation.z = -0.15;
-  group.add(staff);
-
-  const orb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.11, 8, 8),
-    new THREE.MeshLambertMaterial({ color: 0xffcc4d, emissive: 0xffcc4d, emissiveIntensity: 0.8 })
-  );
-  orb.position.set(0.5, 1.55, 0.12);
-  group.add(orb);
-
-  return group;
 }

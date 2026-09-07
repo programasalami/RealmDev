@@ -11,6 +11,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
 <script>
   // Watchdog: if the 3D scene hasn't reported ready within a few seconds
   // (old browser, blocked GPU, network hiccup, whatever), fall back to
@@ -34,36 +37,66 @@
     <a href="/" class="logo">
       <img src="assets/realmdev-logo.png" alt="RealmDev" class="logo-icon">
     </a>
-    <nav class="site-nav">
-      <a href="https://forum.realmdev.org" target="_blank" rel="noopener">Forums</a>
-      <a href="/developers">Developers</a>
-    </nav>
   </div>
 </header>
 
 <main>
   <div id="scene-root">
-    <canvas id="scene-canvas"></canvas>
+    <div id="game-view">
+      <canvas id="scene-canvas"></canvas>
 
-    <div id="scene-loading">
-      <p class="loading-text">Loading the Nexus&hellip;</p>
-    </div>
+      <div id="scene-loading">
+        <p class="loading-text">Loading the Nexus&hellip;</p>
+      </div>
 
-    <div id="scene-hint" hidden>
-      <p><span class="key">WASD</span> / <span class="key">Arrows</span> to walk &nbsp;&bull;&nbsp; walk into a portal or tap it to enter</p>
-    </div>
+      <div id="touch-joystick" hidden>
+        <div id="joystick-base"><div id="joystick-knob"></div></div>
+      </div>
 
-    <div id="touch-joystick" hidden>
-      <div id="joystick-base"><div id="joystick-knob"></div></div>
-    </div>
-
-    <div id="scene-fallback" hidden>
-      <p>Your browser can't render the 3D Nexus, but the realm is still open:</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="https://forum.realmdev.org" target="_blank" rel="noopener">Enter the Forums</a>
-        <a class="btn btn-ghost" href="/developers">Developers</a>
+      <div id="scene-fallback" hidden>
+        <p>Your browser can't render the 3D Nexus, but the realm is still open:</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://forum.realmdev.org" target="_blank" rel="noopener">Enter the Forums</a>
+          <a class="btn btn-ghost" href="/developers">Developers</a>
+        </div>
       </div>
     </div>
+
+    <aside id="hud">
+      <div class="hud-name">MonsterSlayer99</div>
+
+      <div class="stat-bar">
+        <div class="stat-bar-label"><span>HP</span><span>100/100</span></div>
+        <div class="stat-bar-track"><div class="stat-bar-fill hp"></div></div>
+      </div>
+      <div class="stat-bar">
+        <div class="stat-bar-label"><span>MP</span><span>100/100</span></div>
+        <div class="stat-bar-track"><div class="stat-bar-fill mp"></div></div>
+      </div>
+
+      <div class="hud-section-label">Map</div>
+      <div id="minimap-wrap">
+        <canvas id="minimap-canvas" width="200" height="140"></canvas>
+      </div>
+
+      <div class="hud-section-label">Equipment</div>
+      <div class="inv-grid">
+        <div class="inv-slot">🗡️</div>
+        <div class="inv-slot">🛡️</div>
+        <div class="inv-slot">🧪</div>
+        <div class="inv-slot">📜</div>
+        <div class="inv-slot">💍</div>
+        <div class="inv-slot">🏹</div>
+        <div class="inv-slot"></div>
+        <div class="inv-slot"></div>
+      </div>
+
+      <ul class="hud-tips">
+        <li>WASD or Arrow Keys to walk</li>
+        <li>Drag to look around</li>
+        <li>Tap to interact with some features</li>
+      </ul>
+    </aside>
   </div>
 </main>
 

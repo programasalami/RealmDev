@@ -267,10 +267,16 @@ body.game-page main {
   min-height: 0;
 }
 #scene-root {
-  position: relative;
+  display: flex;
   flex: 1;
   width: 100%;
   min-height: 420px;
+  overflow: hidden;
+}
+#game-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
   background: #7ec9ec;
   overflow: hidden;
 }
@@ -279,7 +285,10 @@ body.game-page main {
   width: 100%;
   height: 100%;
   touch-action: none;
-  cursor: pointer;
+  cursor: grab;
+}
+#scene-canvas:active {
+  cursor: grabbing;
 }
 #scene-loading[hidden],
 #scene-fallback[hidden] {
@@ -308,27 +317,79 @@ body.game-page main {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
 }
-#scene-fallback p { color: var(--text-dim); font-size: 20px; max-width: 420px; }
-#scene-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
-  background: rgba(13, 11, 26, 0.75);
-  border: 3px solid var(--border);
-  padding: 10px 18px;
-  pointer-events: none;
+#scene-fallback p { color: var(--text-dim); max-width: 420px; }
+
+/* Right-side HUD */
+#hud {
+  flex-shrink: 0;
+  width: 220px;
+  background: #43434c;
+  border-left: 4px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
 }
-#scene-hint p { margin: 0; color: var(--text); font-size: 18px; }
-#scene-hint .key {
-  display: inline-block;
-  background: var(--panel);
-  border: 2px solid var(--gold-dim);
-  color: var(--gold);
-  padding: 1px 8px;
+.hud-name {
   font-family: var(--font-pixel);
-  font-size: 11px;
+  font-size: 13px;
+  color: var(--gold);
+  text-shadow: 1px 1px 0 #000;
 }
+.hud-section-label {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  margin-bottom: -6px;
+}
+.stat-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.stat-bar-track {
+  height: 14px;
+  background: #1a1a20;
+  border: 2px solid #000;
+}
+.stat-bar-fill { height: 100%; }
+.stat-bar-fill.hp { width: 100%; background: #c0392b; }
+.stat-bar-fill.mp { width: 100%; background: #2f6fd6; }
+
+#minimap-wrap {
+  border: 3px solid var(--border);
+  background: #1a1a20;
+  line-height: 0;
+}
+#minimap-canvas { display: block; width: 100%; height: 140px; }
+
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.inv-slot {
+  aspect-ratio: 1;
+  background: #2a2a32;
+  border: 2px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.hud-tips {
+  margin: auto 0 0;
+  padding-left: 18px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-dim);
+}
+.hud-tips li { margin-bottom: 2px; }
 
 #touch-joystick {
   position: absolute;
@@ -364,4 +425,7 @@ body.game-page main {
   .site-nav { gap: 14px; }
   .site-nav a { font-size: 16px; }
   .title-pixel { font-size: 32px; }
+  #hud { width: 150px; padding: 10px; gap: 10px; }
+  #minimap-canvas { height: 100px; }
+  .hud-tips { font-size: 13px; }
 }
