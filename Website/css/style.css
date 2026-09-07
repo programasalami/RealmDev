@@ -281,6 +281,10 @@ body.game-page main {
   touch-action: none;
   cursor: pointer;
 }
+#scene-loading[hidden],
+#scene-fallback[hidden] {
+  display: none;
+}
 #scene-loading,
 #scene-fallback {
   position: absolute;

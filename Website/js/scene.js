@@ -35,21 +35,16 @@ function showFallback() {
   markReady();
 }
 
-console.log('[RealmDev] scene.js loaded, WebGL support:', supportsWebGL());
-
 if (!supportsWebGL()) {
-  console.log('[RealmDev] supportsWebGL() returned false, showing fallback');
   showFallback();
 } else {
-  console.log('[RealmDev] calling init()');
   init().catch((err) => {
-    console.error('[RealmDev] init() threw:', err);
+    console.error(err);
     showFallback();
   });
 }
 
 async function init() {
-  console.log('[RealmDev] init() started');
   // Best-effort: get the pixel font ready before drawing portal labels, but
   // never let this block startup — document.fonts.load() has been known to
   // hang indefinitely (never resolve or reject) in some browsers.
@@ -61,7 +56,6 @@ async function init() {
   } catch (e) {
     /* labels just fall back to default font */
   }
-  console.log('[RealmDev] font step done, creating renderer');
 
   const GROUND_SIZE = 40;
   const BOUNDS = GROUND_SIZE / 2 - 1.5;
@@ -80,7 +74,6 @@ async function init() {
     e.preventDefault();
     showFallback();
   });
-  console.log('[RealmDev] renderer created:', renderer.getContext());
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
@@ -301,7 +294,6 @@ async function init() {
     requestAnimationFrame(animate);
   }
 
-  console.log('[RealmDev] setup complete, starting render loop');
   loadingEl.hidden = true;
   fallbackEl.hidden = true; // success always wins, even if the watchdog already fired
   hintEl.hidden = false;
