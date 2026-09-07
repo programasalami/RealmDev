@@ -64,7 +64,7 @@ if (!supportsWebGL()) {
 async function init() {
   const GROUND_SIZE = 40;
   const BOUNDS = GROUND_SIZE / 2 - 1.5;
-  const SKY = 0x131022; // dim, cozy dusk tone instead of a bright open-air plaza
+  const SKY = 0x221d3a; // dim, cozy dusk tone instead of a bright open-air plaza
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -82,7 +82,7 @@ async function init() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, 10, 32);
+  scene.fog = new THREE.Fog(SKY, 16, 42);
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
 
@@ -370,12 +370,11 @@ function buildPerimeter(scene, groundSize) {
   const bounds = groundSize / 2;
   const stone = stoneMaterial(0xcfd3da);
   const roof = stoneMaterial(0x3f6fb0);
-  const wood = stoneMaterial(0x7a5230);
 
   // enclosing walls on all 4 sides — everything else below is decoration
   // layered against these, but this guarantees a fully closed-in room
   // regardless of gaps between the decorative buildings/towers.
-  const WALL_HEIGHT = 5;
+  const WALL_HEIGHT = 30;
   const WALL_THICK = 1;
   const nsWallGeo = new THREE.BoxGeometry(groundSize, WALL_HEIGHT, WALL_THICK);
   const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize);
@@ -420,20 +419,6 @@ function buildPerimeter(scene, groundSize) {
     }
   });
 
-  // scattered trees
-  for (let i = 0; i < 10; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = bounds - 3 - Math.random() * 4;
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
-    if (Math.abs(x) < 10 && z < -bounds + 8) continue;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.2, 6), wood);
-    trunk.position.set(x, 0.6, z);
-    scene.add(trunk);
-    const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 7), stoneMaterial(0x3f8f4d));
-    leaves.position.set(x, 1.9, z);
-    scene.add(leaves);
-  }
 }
 
 // Loads assets/wizard.glb into `target`, auto-scaling it to a consistent
