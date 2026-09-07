@@ -99,10 +99,12 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: fals
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.4;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d0810);
-scene.fog = new THREE.Fog(0x0d0810, 18, 34);
+scene.background = new THREE.Color(0x241c30);
+scene.fog = new THREE.Fog(0x241c30, 22, 40);
 
 const FRUSTUM = 9;
 let aspect = window.innerWidth / window.innerHeight;
@@ -118,10 +120,14 @@ const rig = new THREE.Group();
 scene.add(rig);
 
 // ---------- lighting: torch-lit vault ----------
-const ambient = new THREE.AmbientLight(0x39304f, 1.1);
+const ambient = new THREE.HemisphereLight(0x8878b0, 0x2a2034, 2.2);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight(0xffb46b, 1.4);
+const fillLight = new THREE.DirectionalLight(0x8fa8ff, 1.6);
+fillLight.position.set(-6, 6, -4);
+scene.add(fillLight);
+
+const keyLight = new THREE.DirectionalLight(0xffb46b, 3.4);
 keyLight.position.set(6, 10, 4);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(1024, 1024);
@@ -150,7 +156,7 @@ function makeTorch(x, z, rotY) {
   flame.position.y = 0.9;
   group.add(flame);
 
-  const light = new THREE.PointLight(0xff8a3c, 1.4, 7, 2);
+  const light = new THREE.PointLight(0xff8a3c, 6, 10, 2);
   light.position.y = 0.95;
   group.add(light);
 
@@ -158,7 +164,7 @@ function makeTorch(x, z, rotY) {
   group.rotation.y = rotY;
   group.userData.flame = flame;
   group.userData.light = light;
-  group.userData.baseIntensity = 1.4;
+  group.userData.baseIntensity = 6;
   return group;
 }
 
@@ -256,7 +262,7 @@ function buildPortal() {
   const inner = new THREE.Mesh(new THREE.CircleGeometry(1.0, 24), innerMat);
   group.add(inner);
 
-  const light = new THREE.PointLight(0x7fe3ff, 1.2, 6, 2);
+  const light = new THREE.PointLight(0x7fe3ff, 4, 8, 2);
   light.position.z = 0.4;
   group.add(light);
 
@@ -281,7 +287,7 @@ function buildBag() {
   tie.rotation.x = Math.PI / 2;
   group.add(tie);
 
-  const glow = new THREE.PointLight(0xffffff, 0.6, 3, 2);
+  const glow = new THREE.PointLight(0xffffff, 2, 4, 2);
   group.add(glow);
 
   group.position.set(2.7, 0.5, 2.0);
@@ -344,7 +350,7 @@ function animate() {
   const t = clock.getElapsedTime();
 
   torches.forEach((torch, i) => {
-    const flicker = Math.sin(t * 9 + i * 3) * 0.15 + Math.sin(t * 23 + i) * 0.08;
+    const flicker = Math.sin(t * 9 + i * 3) * 0.9 + Math.sin(t * 23 + i) * 0.5;
     torch.userData.light.intensity = torch.userData.baseIntensity + flicker;
     torch.userData.flame.scale.y = 1 + Math.sin(t * 14 + i) * 0.08;
   });
@@ -438,6 +444,7 @@ window.addEventListener('click', (e) => {
 // ---------- interactions ----------
 const overlay = document.getElementById('panel-overlay');
 const panels = {
+  chest: document.getElementById('panel-chest'),
   portal: document.getElementById('panel-portal'),
   npc: document.getElementById('panel-credits'),
   bag: document.getElementById('panel-changelog'),
@@ -485,7 +492,7 @@ function escapeHtml(s) {
 
 function handleInteract(type) {
   if (type === 'chest') {
-    window.location.href = 'https://forum.realmdev.org';
+    openPanel('chest');
     return;
   }
   if (type === 'portal') {

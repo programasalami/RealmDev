@@ -176,6 +176,9 @@ html, body {
   backdrop-filter: blur(2px);
   padding: 20px;
 }
+#panel-overlay[hidden] {
+  display: none;
+}
 .panel {
   position: relative;
   max-width: 560px;
