@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
 
+const gltfLoader = new GLTFLoader();
+
 const gameView = document.getElementById('game-view');
 const canvas = document.getElementById('scene-canvas');
 const loadingEl = document.getElementById('scene-loading');
@@ -392,8 +394,6 @@ function buildPerimeter(scene, groundSize) {
     scene.add(leaves);
   }
 }
-
-const gltfLoader = new GLTFLoader();
 
 // Loads assets/wizard.glb into `target`, auto-scaling it to a consistent
 // height and sitting its base on the ground regardless of how it was
