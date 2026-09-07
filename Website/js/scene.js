@@ -37,6 +37,19 @@ function showFallback() {
   markReady();
 }
 
+// Catch-all: any uncaught exception or rejected promise anywhere in the
+// scene (not just inside init()'s own try/catch) falls back gracefully
+// instead of leaving a half-broken canvas, and gets logged so it's
+// actually diagnosable instead of a silent guess.
+window.addEventListener('error', (e) => {
+  console.error('[RealmDev scene] uncaught error:', e.error || e.message);
+  showFallback();
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[RealmDev scene] unhandled rejection:', e.reason);
+  showFallback();
+});
+
 if (!supportsWebGL()) {
   showFallback();
 } else {

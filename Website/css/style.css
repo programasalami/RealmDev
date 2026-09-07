@@ -336,29 +336,32 @@ body.game-page main {
   font-size: 13px;
   color: var(--gold);
   text-shadow: 1px 1px 0 #000;
+  text-align: center;
 }
-.hud-section-label {
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  margin-bottom: -6px;
-}
-.stat-bar-label {
+.stat-bars {
   display: flex;
-  justify-content: space-between;
-  font-size: 15px;
-  color: var(--text);
-  margin-bottom: 3px;
+  flex-direction: column;
+  gap: 2px;
 }
 .stat-bar-track {
-  height: 14px;
+  position: relative;
+  height: 18px;
   background: #1a1a20;
   border: 2px solid #000;
+  display: flex;
+  align-items: center;
 }
-.stat-bar-fill { height: 100%; }
+.stat-bar-fill { position: absolute; inset: 0; height: 100%; }
 .stat-bar-fill.hp { width: 100%; background: #c0392b; }
 .stat-bar-fill.mp { width: 100%; background: #2f6fd6; }
+.stat-bar-text {
+  position: relative;
+  z-index: 1;
+  padding-left: 6px;
+  font-size: 13px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
 
 #minimap-wrap {
   border: 3px solid var(--border);
