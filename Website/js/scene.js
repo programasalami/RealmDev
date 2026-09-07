@@ -303,6 +303,7 @@ async function init() {
 
   console.log('[RealmDev] setup complete, starting render loop');
   loadingEl.hidden = true;
+  fallbackEl.hidden = true; // success always wins, even if the watchdog already fired
   hintEl.hidden = false;
   markReady();
   requestAnimationFrame(animate);

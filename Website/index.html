@@ -22,7 +22,9 @@
     var fallback = document.getElementById('scene-fallback');
     if (loading) loading.hidden = true;
     if (fallback) fallback.hidden = false;
-  }, 6000);
+    // Note: if scene.js finishes loading after this point, it un-hides
+    // itself and re-hides this fallback — success always wins.
+  }, 18000);
 </script>
 </head>
 <body class="game-page">
