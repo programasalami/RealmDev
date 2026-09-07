@@ -64,7 +64,7 @@ if (!supportsWebGL()) {
 async function init() {
   const GROUND_SIZE = 40;
   const BOUNDS = GROUND_SIZE / 2 - 1.5;
-  const SKY = 0x221d3a; // dim, cozy dusk tone instead of a bright open-air plaza
+  const SKY = 0x4a4470; // brighter cozy dusk tone — visible and colorful, not blown out
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -75,6 +75,8 @@ async function init() {
   // Old / integrated GPUs choke on high-DPI fill rate far more than on
   // scene complexity, so don't scale the canvas up for retina displays.
   renderer.setPixelRatio(1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     showFallback();
@@ -82,18 +84,27 @@ async function init() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, 16, 42);
+  scene.fog = new THREE.Fog(SKY, 20, 48);
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
 
-  // Dim, warm, low-contrast lighting — a lit room at dusk rather than an
-  // open sunny plaza. A little cool ambient/hemisphere fill keeps shadows
-  // from crushing to pure black, plus a few warm torch-like accent lights.
-  scene.add(new THREE.AmbientLight(0x4a4560, 0.45));
-  const moon = new THREE.DirectionalLight(0x8fa0d8, 0.35);
-  moon.position.set(-14, 20, 10);
-  scene.add(moon);
-  scene.add(new THREE.HemisphereLight(0x2e2a44, 0x14121f, 0.3));
+  // Bright but still moody: a strong key light casts real shadows for
+  // definition, kept in check by modest ambient/hemisphere fill so
+  // surfaces stay lit without flattening into a shadowless haze.
+  scene.add(new THREE.AmbientLight(0x5c5580, 0.55));
+  const sun = new THREE.DirectionalLight(0xffe6b8, 1.2);
+  sun.position.set(-14, 22, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -BOUNDS - 2;
+  sun.shadow.camera.right = BOUNDS + 2;
+  sun.shadow.camera.top = BOUNDS + 2;
+  sun.shadow.camera.bottom = -BOUNDS - 2;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 60;
+  sun.shadow.bias = -0.002;
+  scene.add(sun);
+  scene.add(new THREE.HemisphereLight(0x413a68, 0x201c33, 0.45));
 
   const torchPositions = [
     [-BOUNDS + 1, 3.2, -BOUNDS + 1],
@@ -102,7 +113,7 @@ async function init() {
     [BOUNDS - 1, 3.2, BOUNDS - 1],
   ];
   torchPositions.forEach(([x, y, z]) => {
-    const torch = new THREE.PointLight(0xffa64d, 1.1, 14, 2);
+    const torch = new THREE.PointLight(0xff9d4d, 1.4, 16, 2);
     torch.position.set(x, y, z);
     scene.add(torch);
   });
@@ -115,6 +126,7 @@ async function init() {
     new THREE.MeshLambertMaterial({ map: groundTex })
   );
   ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   scene.add(ground);
 
   buildPerimeter(scene, GROUND_SIZE);
@@ -366,10 +378,56 @@ function stoneMaterial(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
+// Blocky brick/stone texture with per-block tone variation, built from a
+// base color, so walls read as textured masonry instead of flat plastic.
+function makeBrickTexture(baseHex, { rows = 6, cols = 6, variance = 18 } = {}) {
+  const size = 128;
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const base = new THREE.Color(baseHex);
+  const tileW = size / cols;
+  const tileH = size / rows;
+  for (let r = 0; r < rows; r++) {
+    const offset = (r % 2) * (tileW / 2);
+    for (let c = -1; c <= cols; c++) {
+      const shade = 1 + (Math.random() - 0.5) * (variance / 100);
+      ctx.fillStyle = `rgb(${Math.min(255, base.r * 255 * shade) | 0}, ${Math.min(255, base.g * 255 * shade) | 0}, ${Math.min(255, base.b * 255 * shade) | 0})`;
+      ctx.fillRect(c * tileW + offset, r * tileH, tileW - 3, tileH - 3);
+    }
+  }
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function brickMaterial(baseHex, repeatX = 3, repeatY = 3, opts) {
+  const tex = makeBrickTexture(baseHex, opts);
+  tex.repeat.set(repeatX, repeatY);
+  return new THREE.MeshLambertMaterial({ map: tex, flatShading: true });
+}
+
+function bannerMaterial(hex) {
+  return new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide });
+}
+
+function castAndReceive(mesh) {
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 function buildPerimeter(scene, groundSize) {
   const bounds = groundSize / 2;
-  const stone = stoneMaterial(0xcfd3da);
-  const roof = stoneMaterial(0x3f6fb0);
+
+  const wallMat = brickMaterial(0xcbb48a, 10, 7); // warm sandstone, textured
+  const towerMat = brickMaterial(0x9aa5bd, 3, 5); // cooler blue-grey stone
+  const roofBlue = stoneMaterial(0x3f6fb0);
+  const roofRed = stoneMaterial(0xa8432f);
+  const merlonMat = brickMaterial(0xb7a17c, 1, 1);
 
   // enclosing walls on all 4 sides — everything else below is decoration
   // layered against these, but this guarantees a fully closed-in room
@@ -379,46 +437,71 @@ function buildPerimeter(scene, groundSize) {
   const nsWallGeo = new THREE.BoxGeometry(groundSize, WALL_HEIGHT, WALL_THICK);
   const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize);
   [-1, 1].forEach((side) => {
-    const wallNS = new THREE.Mesh(nsWallGeo, stone);
+    const wallNS = castAndReceive(new THREE.Mesh(nsWallGeo, wallMat));
     wallNS.position.set(0, WALL_HEIGHT / 2, side * bounds);
     scene.add(wallNS);
-    const wallEW = new THREE.Mesh(ewWallGeo, stone);
+    const wallEW = castAndReceive(new THREE.Mesh(ewWallGeo, wallMat));
     wallEW.position.set(side * bounds, WALL_HEIGHT / 2, 0);
     scene.add(wallEW);
-  });
 
-  // back castle facade
-  const facade = new THREE.Mesh(new THREE.BoxGeometry(22, 7, 1.5), stone);
-  facade.position.set(0, 3.5, -bounds);
-  scene.add(facade);
-
-  const keep = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 1.5), stone);
-  keep.position.set(0, 5, -bounds - 0.2);
-  scene.add(keep);
-
-  [-1, 1].forEach((side) => {
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 9, 10), stone);
-    tower.position.set(side * 10, 4.5, -bounds);
-    scene.add(tower);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(2, 3, 10), roof);
-    cone.position.set(side * 10, 10.5, -bounds);
-    scene.add(cone);
-  });
-
-  // side buildings
-  [-1, 1].forEach((side) => {
-    for (let i = 0; i < 3; i++) {
-      const h = 3 + Math.random() * 2;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(4.5, h, 4.5), stone);
-      box.position.set(side * (bounds - 2.2), h / 2, -bounds + 6 + i * 6);
-      scene.add(box);
-      const roofMesh = new THREE.Mesh(new THREE.ConeGeometry(3.4, 1.8, 4), roof);
-      roofMesh.rotation.y = Math.PI / 4;
-      roofMesh.position.set(box.position.x, h + 0.9, box.position.z);
-      scene.add(roofMesh);
+    // crenellations along the top edge for a proper castle-wall silhouette
+    for (let x = -bounds; x <= bounds; x += 3) {
+      const merlonNS = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, WALL_THICK + 0.4), merlonMat));
+      merlonNS.position.set(x, WALL_HEIGHT + 0.8, side * bounds);
+      scene.add(merlonNS);
+      const merlonEW = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(WALL_THICK + 0.4, 1.6, 1.4), merlonMat));
+      merlonEW.position.set(side * bounds, WALL_HEIGHT + 0.8, x);
+      scene.add(merlonEW);
     }
   });
 
+  // colorful banners hanging at intervals along the walls
+  const bannerColors = [0xffcc4d, 0xa06cff, 0x39c2a0];
+  [-1, 1].forEach((side) => {
+    [-bounds + 3, -6, 0, 6, bounds - 3].forEach((x, i) => {
+      const banner = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.6, 3.4),
+        bannerMaterial(bannerColors[i % bannerColors.length])
+      );
+      banner.position.set(x, 7, side * bounds - side * 0.6);
+      banner.rotation.y = side > 0 ? Math.PI : 0;
+      scene.add(banner);
+    });
+  });
+
+  // back castle facade
+  const facade = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(22, 14, 1.5), towerMat));
+  facade.position.set(0, 7, -bounds);
+  scene.add(facade);
+
+  const keep = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(7, 20, 1.5), towerMat));
+  keep.position.set(0, 10, -bounds - 0.2);
+  scene.add(keep);
+
+  [-1, 1].forEach((side) => {
+    const tower = castAndReceive(new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.5, 18, 10), towerMat));
+    tower.position.set(side * 10, 9, -bounds);
+    scene.add(tower);
+    const cone = castAndReceive(new THREE.Mesh(new THREE.ConeGeometry(2.8, 4.5, 10), roofBlue));
+    cone.position.set(side * 10, 20.25, -bounds);
+    scene.add(cone);
+  });
+
+  // side buildings — uniform, evenly spaced, alternating warm roof colors
+  [-1, 1].forEach((side) => {
+    for (let i = 0; i < 3; i++) {
+      const h = 4.5;
+      const box = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(4.5, h, 4.5), wallMat));
+      box.position.set(side * (bounds - 2.2), h / 2, -bounds + 6 + i * 8);
+      scene.add(box);
+      const roofMesh = castAndReceive(
+        new THREE.Mesh(new THREE.ConeGeometry(3.4, 2.2, 4), i % 2 === 0 ? roofBlue : roofRed)
+      );
+      roofMesh.rotation.y = Math.PI / 4;
+      roofMesh.position.set(box.position.x, h + 1.1, box.position.z);
+      scene.add(roofMesh);
+    }
+  });
 }
 
 // Loads assets/wizard.glb into `target`, auto-scaling it to a consistent
@@ -445,6 +528,13 @@ function loadWizardModel(target, onMixer) {
       model.position.x -= center.x;
       model.position.z -= center.z;
       model.position.y -= scaledBox.min.y;
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
 
       target.add(model);
 
