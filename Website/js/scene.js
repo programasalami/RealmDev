@@ -103,20 +103,11 @@ async function init() {
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 60;
   sun.shadow.bias = -0.002;
+  sun.shadow.normalBias = 0.05; // extra insurance against acne on grazing-angle wall faces
   scene.add(sun);
   scene.add(new THREE.HemisphereLight(0x413a68, 0x201c33, 0.45));
-
-  const torchPositions = [
-    [-BOUNDS + 1, 3.2, -BOUNDS + 1],
-    [BOUNDS - 1, 3.2, -BOUNDS + 1],
-    [-BOUNDS + 1, 3.2, BOUNDS - 1],
-    [BOUNDS - 1, 3.2, BOUNDS - 1],
-  ];
-  torchPositions.forEach(([x, y, z]) => {
-    const torch = new THREE.PointLight(0xff9d4d, 1.4, 16, 2);
-    torch.position.set(x, y, z);
-    scene.add(torch);
-  });
+  // Ceiling-mounted lanterns (added in buildPerimeter) are the room's real
+  // light fixtures — no separate corner torches needed on top of those.
 
   // ---------- ground ----------
   const groundTex = makeCheckerTexture();
@@ -423,10 +414,10 @@ function castAndReceive(mesh) {
 function buildPerimeter(scene, groundSize) {
   const bounds = groundSize / 2;
 
+  // Single stone material for every structural surface (walls, facade,
+  // towers, merlons) so the room reads as one consistent material.
   const wallMat = brickMaterial(0xcbb48a, 10, 7); // warm sandstone, textured
-  const towerMat = brickMaterial(0x9aa5bd, 3, 5); // cooler blue-grey stone
   const roofBlue = stoneMaterial(0x3f6fb0);
-  const roofRed = stoneMaterial(0xa8432f);
   const merlonMat = brickMaterial(0xb7a17c, 1, 1);
 
   // enclosing walls on all 4 sides — everything else below is decoration
@@ -434,8 +425,12 @@ function buildPerimeter(scene, groundSize) {
   // regardless of gaps between the decorative buildings/towers.
   const WALL_HEIGHT = 30;
   const WALL_THICK = 1;
+  // NS walls span the full width (and thus own the 4 corners); EW walls are
+  // shortened to fit exactly between them so the two never occupy the same
+  // space — that overlap was causing z-fighting ("smoke") at the corners,
+  // worst from a distance where depth-buffer precision is coarsest.
   const nsWallGeo = new THREE.BoxGeometry(groundSize, WALL_HEIGHT, WALL_THICK);
-  const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize);
+  const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize - WALL_THICK * 2);
   [-1, 1].forEach((side) => {
     const wallNS = castAndReceive(new THREE.Mesh(nsWallGeo, wallMat));
     wallNS.position.set(0, WALL_HEIGHT / 2, side * bounds);
@@ -444,8 +439,11 @@ function buildPerimeter(scene, groundSize) {
     wallEW.position.set(side * bounds, WALL_HEIGHT / 2, 0);
     scene.add(wallEW);
 
-    // crenellations along the top edge for a proper castle-wall silhouette
-    for (let x = -bounds; x <= bounds; x += 3) {
+    // crenellations along the top edge for a proper castle-wall silhouette.
+    // Inset from the exact corner so the NS and EW rows below never place
+    // a merlon at the same spot (that duplicate/overlapping geometry was
+    // causing a flickering "smoke" artifact right at the corners).
+    for (let x = -bounds + 1.5; x <= bounds - 1.5; x += 3) {
       const merlonNS = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, WALL_THICK + 0.4), merlonMat));
       merlonNS.position.set(x, WALL_HEIGHT + 0.8, side * bounds);
       scene.add(merlonNS);
@@ -470,16 +468,16 @@ function buildPerimeter(scene, groundSize) {
   });
 
   // back castle facade
-  const facade = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(22, 14, 1.5), towerMat));
+  const facade = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(22, 14, 1.5), wallMat));
   facade.position.set(0, 7, -bounds);
   scene.add(facade);
 
-  const keep = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(7, 20, 1.5), towerMat));
+  const keep = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(7, 20, 1.5), wallMat));
   keep.position.set(0, 10, -bounds - 0.2);
   scene.add(keep);
 
   [-1, 1].forEach((side) => {
-    const tower = castAndReceive(new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.5, 18, 10), towerMat));
+    const tower = castAndReceive(new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.5, 18, 10), wallMat));
     tower.position.set(side * 10, 9, -bounds);
     scene.add(tower);
     const cone = castAndReceive(new THREE.Mesh(new THREE.ConeGeometry(2.8, 4.5, 10), roofBlue));
@@ -487,20 +485,41 @@ function buildPerimeter(scene, groundSize) {
     scene.add(cone);
   });
 
-  // side buildings — uniform, evenly spaced, alternating warm roof colors
-  [-1, 1].forEach((side) => {
-    for (let i = 0; i < 3; i++) {
-      const h = 4.5;
-      const box = castAndReceive(new THREE.Mesh(new THREE.BoxGeometry(4.5, h, 4.5), wallMat));
-      box.position.set(side * (bounds - 2.2), h / 2, -bounds + 6 + i * 8);
-      scene.add(box);
-      const roofMesh = castAndReceive(
-        new THREE.Mesh(new THREE.ConeGeometry(3.4, 2.2, 4), i % 2 === 0 ? roofBlue : roofRed)
-      );
-      roofMesh.rotation.y = Math.PI / 4;
-      roofMesh.position.set(box.position.x, h + 1.1, box.position.z);
-      scene.add(roofMesh);
-    }
+  // ceiling — fully seals the room top, and gives the hanging lanterns
+  // below something to be mounted to.
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(groundSize, groundSize),
+    stoneMaterial(0x8a7a5c)
+  );
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = WALL_HEIGHT;
+  ceiling.receiveShadow = true;
+  scene.add(ceiling);
+
+  // hardcoded hanging lanterns — the room's real light sources, rather than
+  // relying on a sun-like light shining into a sealed building. A plus-shaped
+  // layout gives even coverage across the room without piling up too many
+  // real-time point lights (costly on weaker/older GPUs).
+  const lanternGlow = new THREE.MeshLambertMaterial({ color: 0xffcc80, emissive: 0xffaa40, emissiveIntensity: 1.5 });
+  const chainMat = stoneMaterial(0x2a2a2a);
+  const lanternSpots = [
+    [0, 0],
+    [-14, 0],
+    [14, 0],
+    [0, -14],
+    [0, 14],
+  ];
+  lanternSpots.forEach(([x, z]) => {
+    const dropY = WALL_HEIGHT - 4;
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4, 6), chainMat);
+    chain.position.set(x, WALL_HEIGHT - 2, z);
+    scene.add(chain);
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), lanternGlow);
+    lantern.position.set(x, dropY, z);
+    scene.add(lantern);
+    const light = new THREE.PointLight(0xffb866, 1.4, 24, 2);
+    light.position.set(x, dropY, z);
+    scene.add(light);
   });
 }
 
