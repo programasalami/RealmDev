@@ -38,8 +38,14 @@ if (!supportsWebGL()) {
 }
 
 async function init() {
+  // Best-effort: get the pixel font ready before drawing portal labels, but
+  // never let this block startup — document.fonts.load() has been known to
+  // hang indefinitely (never resolve or reject) in some browsers.
   try {
-    await document.fonts.load('40px "Press Start 2P"');
+    await Promise.race([
+      document.fonts.load('40px "Press Start 2P"'),
+      new Promise((resolve) => setTimeout(resolve, 800)),
+    ]);
   } catch (e) {
     /* labels just fall back to default font */
   }
