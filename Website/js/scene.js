@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const canvas = document.getElementById('scene-canvas');
 const tooltip = document.getElementById('tooltip');
@@ -8,32 +7,16 @@ const loadingBarFill = document.getElementById('loading-bar-fill');
 
 const PIXEL_SCALE = 0.4; // render small, upscale with CSS pixelation for the retro look
 
-// ---------- loading manager ----------
-const manager = new THREE.LoadingManager();
-const MIN_LOADING_MS = 900;
-const loadStart = performance.now();
-let loadingDone = false;
-
-manager.onProgress = (_url, loaded, total) => {
-  const pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : 100;
-  loadingBarFill.style.width = pct + '%';
-};
-manager.onLoad = () => {
-  loadingDone = true;
-  const elapsed = performance.now() - loadStart;
-  const wait = Math.max(0, MIN_LOADING_MS - elapsed);
-  setTimeout(() => {
-    loadingBarFill.style.width = '100%';
-    loadingScreen.classList.add('hidden');
-  }, wait);
-};
-// Fallback in case something never fires onLoad (e.g. GLTF fetch stalls).
-setTimeout(() => {
-  if (!loadingDone) {
-    loadingBarFill.style.width = '100%';
-    loadingScreen.classList.add('hidden');
+// ---------- loading screen: cosmetic, everything here builds synchronously ----------
+let loadingPct = 0;
+const loadingTimer = setInterval(() => {
+  loadingPct = Math.min(100, loadingPct + 20);
+  loadingBarFill.style.width = loadingPct + '%';
+  if (loadingPct >= 100) {
+    clearInterval(loadingTimer);
+    setTimeout(() => loadingScreen.classList.add('hidden'), 200);
   }
-}, 9000);
+}, 150);
 
 // ---------- pixel texture helpers ----------
 function makeTexture(size, draw) {
@@ -207,7 +190,7 @@ leftWall.position.set(-ROOM / 2, wallHeight / 2, 0);
 leftWall.receiveShadow = true;
 rig.add(leftWall);
 
-// ---------- interactive objects ----------
+// ---------- interactive objects: four vault chests along the back wall ----------
 const interactive = [];
 
 function registerInteractive(object, type, label) {
@@ -217,7 +200,6 @@ function registerInteractive(object, type, label) {
   rig.add(object);
 }
 
-// Vault Chest
 function buildChest() {
   const group = new THREE.Group();
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x5b3a22, roughness: 0.8 });
@@ -243,105 +225,21 @@ function buildChest() {
   lock.position.set(0, 0.55, 0.48);
   group.add(lock);
 
-  group.position.set(-2.6, 0, 1.8);
-  group.rotation.y = 0.5;
-  return group;
-}
-const chest = buildChest();
-registerInteractive(chest, 'chest', 'The Vault Chest — Forums');
-
-// Nexus Portal
-function buildPortal() {
-  const group = new THREE.Group();
-  const ringMat = new THREE.MeshStandardMaterial({ color: 0x2a1f40, emissive: 0x6a3fd6, emissiveIntensity: 0.5, roughness: 0.5 });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.16, 12, 24), ringMat);
-  ring.castShadow = true;
-  group.add(ring);
-
-  const innerMat = new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
-  const inner = new THREE.Mesh(new THREE.CircleGeometry(1.0, 24), innerMat);
-  group.add(inner);
-
-  const light = new THREE.PointLight(0x7fe3ff, 4, 8, 2);
-  light.position.z = 0.4;
-  group.add(light);
-
-  group.userData.ring = ring;
-  group.userData.inner = inner;
-  group.position.set(0, 1.3, -3.6);
-  return group;
-}
-const portal = buildPortal();
-registerInteractive(portal, 'portal', 'The Nexus Portal — Warriors & Wizards');
-
-// White Bag
-function buildBag() {
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xf1ece0, emissive: 0xffffff, emissiveIntensity: 0.15, roughness: 0.6 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), mat);
-  body.scale.set(1, 0.85, 1);
-  body.castShadow = true;
-  group.add(body);
-  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.035, 6, 10), new THREE.MeshStandardMaterial({ color: 0xc9a24a }));
-  tie.position.y = 0.26;
-  tie.rotation.x = Math.PI / 2;
-  group.add(tie);
-
-  const glow = new THREE.PointLight(0xffffff, 2, 4, 2);
-  group.add(glow);
-
-  group.position.set(2.7, 0.5, 2.0);
-  group.userData.baseY = 0.5;
-  return group;
-}
-const bag = buildBag();
-registerInteractive(bag, 'bag', 'White Bag — Changelog');
-
-// Guill, the Guild Hall Assistant — GLTF with a low-poly fallback
-function buildFallbackNpc() {
-  const group = new THREE.Group();
-  const robeMat = new THREE.MeshStandardMaterial({ color: 0x3b5f8a, roughness: 0.8 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0b48a, roughness: 0.7 });
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.1, 8), robeMat);
-  body.position.y = 0.65;
-  body.castShadow = true;
-  group.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), skinMat);
-  head.position.y = 1.3;
-  head.castShadow = true;
-  group.add(head);
-  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 8), robeMat);
-  hat.position.y = 1.65;
-  group.add(hat);
   return group;
 }
 
-const npcGroup = new THREE.Group();
-npcGroup.position.set(3.1, 0, -2.4);
-npcGroup.rotation.y = -0.6;
-registerInteractive(npcGroup, 'npc', 'Guill — Credits');
+const CHESTS = [
+  { x: -3.6, type: 'forum', label: 'Vault Chest — Forums' },
+  { x: -1.2, type: 'portal', label: 'Vault Chest — Warriors & Wizards' },
+  { x: 1.2, type: 'team', label: 'Vault Chest — RealmDev Team' },
+  { x: 3.6, type: 'log', label: 'Vault Chest — Update Log' },
+];
 
-const gltfLoader = new GLTFLoader(manager);
-gltfLoader.load(
-  'assets/wizard.glb',
-  (gltf) => {
-    const model = gltf.scene;
-    const box = new THREE.Box3().setFromObject(model);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const targetHeight = 1.7;
-    const scale = size.y > 0 ? targetHeight / size.y : 1;
-    model.scale.setScalar(scale);
-    model.traverse((child) => {
-      if (child.isMesh) child.castShadow = true;
-    });
-    npcGroup.add(model);
-  },
-  undefined,
-  () => {
-    npcGroup.add(buildFallbackNpc());
-  }
-);
+CHESTS.forEach(({ x, type, label }) => {
+  const chest = buildChest();
+  chest.position.set(x, 0, -4);
+  registerInteractive(chest, type, label);
+});
 
 // ---------- torch flicker + idle animation ----------
 const clock = new THREE.Clock();
@@ -354,15 +252,6 @@ function animate() {
     torch.userData.light.intensity = torch.userData.baseIntensity + flicker;
     torch.userData.flame.scale.y = 1 + Math.sin(t * 14 + i) * 0.08;
   });
-
-  portal.userData.ring.rotation.z = t * 0.4;
-  portal.userData.inner.rotation.z = -t * 0.7;
-  portal.userData.inner.material.opacity = 0.45 + Math.sin(t * 2) * 0.1;
-
-  bag.position.y = bag.userData.baseY + Math.sin(t * 2.2) * 0.08;
-  bag.rotation.y = t * 0.8;
-
-  npcGroup.rotation.y = -0.6 + Math.sin(t * 0.5) * 0.08;
 
   const targetTiltX = pointerNorm.y * 0.05;
   const targetTiltY = pointerNorm.x * 0.08;
@@ -444,10 +333,10 @@ window.addEventListener('click', (e) => {
 // ---------- interactions ----------
 const overlay = document.getElementById('panel-overlay');
 const panels = {
-  chest: document.getElementById('panel-chest'),
+  forum: document.getElementById('panel-forum'),
   portal: document.getElementById('panel-portal'),
-  npc: document.getElementById('panel-credits'),
-  bag: document.getElementById('panel-changelog'),
+  team: document.getElementById('panel-team'),
+  log: document.getElementById('panel-log'),
 };
 
 function openPanel(key) {
@@ -491,22 +380,8 @@ function escapeHtml(s) {
 }
 
 function handleInteract(type) {
-  if (type === 'chest') {
-    openPanel('chest');
-    return;
-  }
-  if (type === 'portal') {
-    openPanel('portal');
-    return;
-  }
-  if (type === 'npc') {
-    openPanel('npc');
-    return;
-  }
-  if (type === 'bag') {
-    openPanel('bag');
-    loadChangelog();
-  }
+  openPanel(type);
+  if (type === 'log') loadChangelog();
 }
 
 // ---------- resize ----------

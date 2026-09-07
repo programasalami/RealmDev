@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>RealmDev — Enter the Vault</title>
-<meta name="description" content="RealmDev is a community hub for 8-bit bullet-hell MMORPG development. Step into the Vault: visit the forums, preview Warriors &amp; Wizards, meet Guill, and check the changelog.">
+<meta name="description" content="RealmDev is a community hub for 8-bit bullet-hell MMORPG development. Step into the Vault: visit the forums, preview Warriors &amp; Wizards, meet the team, and check the update log.">
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/favicon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,22 +44,23 @@
 
 <div id="panel-overlay" hidden>
 
-  <section id="panel-chest" class="panel pixel-frame" hidden>
+  <section id="panel-forum" class="panel pixel-frame" hidden>
     <button class="panel-close" data-close aria-label="Close">✕</button>
-    <h2 class="panel-title">The Vault Chest</h2>
+    <h2 class="panel-title">Forums</h2>
     <p class="panel-body">
       A peek through the vault door — the RealmDev forums, where source releases, tutorials, help
       requests, project showcases and server ads all live.
     </p>
-    <div class="portal-frame-wrap">
-      <iframe class="portal-frame" src="https://forum.realmdev.org" title="RealmDev forums preview" loading="lazy" referrerpolicy="no-referrer"></iframe>
+    <div class="portal-frame-wrap portal-frame-fallback">
+      <img class="portal-frame-icon" src="assets/realmdev-logo.png" alt="">
+      <p>Live preview isn't available in-page — the forum blocks embedding for security.</p>
     </div>
     <a class="btn" href="https://forum.realmdev.org" target="_blank" rel="noopener">Visit the Forums ↗</a>
   </section>
 
   <section id="panel-portal" class="panel pixel-frame" hidden>
     <button class="panel-close" data-close aria-label="Close">✕</button>
-    <h2 class="panel-title">The Nexus Portal</h2>
+    <h2 class="panel-title">Warriors &amp; Wizards</h2>
     <img class="portal-logo" src="assets/warriors-wizards-logo.png" alt="Warriors &amp; Wizards logo">
     <p class="panel-body">
       A realm-like bullet-hell MMORPG being forged behind the scenes at RealmDev — brand new assets,
@@ -67,26 +68,25 @@
       alive for a modern audience. No grand quest, no epic saga — just the simple, cozy joy of gearing up
       as a Warrior or a Wizard and slaying some monsters with friends.
     </p>
-    <div class="portal-frame-wrap">
-      <iframe class="portal-frame" src="https://warriorandwizards.com" title="Warriors & Wizards preview" loading="lazy" referrerpolicy="no-referrer"></iframe>
+    <div class="portal-frame-wrap portal-frame-fallback">
+      <img class="portal-frame-icon" src="assets/warriors-wizards-logo.png" alt="">
+      <p>Live preview isn't available in-page — the site blocks embedding for security.</p>
     </div>
-    <a class="btn" href="https://warriorandwizards.com" target="_blank" rel="noopener">Visit warriorandwizards.com ↗</a>
+    <a class="btn" href="https://warriorsandwizards.com" target="_blank" rel="noopener">Visit warriorsandwizards.com ↗</a>
   </section>
 
-  <section id="panel-credits" class="panel pixel-frame" hidden>
+  <section id="panel-team" class="panel pixel-frame" hidden>
     <button class="panel-close" data-close aria-label="Close">✕</button>
-    <h2 class="panel-title">Guild Hall — Credits</h2>
+    <h2 class="panel-title">RealmDev Team</h2>
     <ul class="credits-list">
       <li><span class="credits-role">Founder &amp; Lead Developer</span><span class="credits-name">programasalami</span></li>
-      <li><span class="credits-role">Built with</span><span class="credits-name">Three.js · HTML5 Canvas · CSS3</span></li>
-      <li><span class="credits-role">Special thanks</span><span class="credits-name">the RealmDev community, keeping the Flash bullet-hell era alive</span></li>
     </ul>
     <a class="btn" href="https://github.com/programasalami/RealmDev" target="_blank" rel="noopener">View the repo ↗</a>
   </section>
 
-  <section id="panel-changelog" class="panel pixel-frame" hidden>
+  <section id="panel-log" class="panel pixel-frame" hidden>
     <button class="panel-close" data-close aria-label="Close">✕</button>
-    <h2 class="panel-title">White Bag — Changelog</h2>
+    <h2 class="panel-title">RealmDev Update Log</h2>
     <ul class="changelog-list" id="changelog-list">
       <li class="changelog-loading">fetching commits&hellip;</li>
     </ul>
