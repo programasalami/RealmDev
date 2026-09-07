@@ -430,7 +430,7 @@ function buildPerimeter(scene, groundSize) {
   // space — that overlap was causing z-fighting ("smoke") at the corners,
   // worst from a distance where depth-buffer precision is coarsest.
   const nsWallGeo = new THREE.BoxGeometry(groundSize, WALL_HEIGHT, WALL_THICK);
-  const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize - WALL_THICK * 2);
+  const ewWallGeo = new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, groundSize - WALL_THICK);
   [-1, 1].forEach((side) => {
     const wallNS = castAndReceive(new THREE.Mesh(nsWallGeo, wallMat));
     wallNS.position.set(0, WALL_HEIGHT / 2, side * bounds);
