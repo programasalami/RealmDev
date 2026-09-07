@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
 const root = document.getElementById('scene-root');
 const canvas = document.getElementById('scene-canvas');
@@ -18,14 +18,22 @@ function supportsWebGL() {
   }
 }
 
-if (!supportsWebGL()) {
+function markReady() {
+  if (window.__realmScene) window.__realmScene.ready = true;
+}
+
+function showFallback() {
   loadingEl.hidden = true;
   fallbackEl.hidden = false;
+  markReady();
+}
+
+if (!supportsWebGL()) {
+  showFallback();
 } else {
   init().catch((err) => {
     console.error(err);
-    loadingEl.hidden = true;
-    fallbackEl.hidden = false;
+    showFallback();
   });
 }
 
@@ -40,8 +48,19 @@ async function init() {
   const BOUNDS = GROUND_SIZE / 2 - 1.5;
   const SKY = 0x7ec9ec;
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: 'default',
+    failIfMajorPerformanceCaveat: false,
+  });
+  // Old / integrated GPUs choke on high-DPI fill rate far more than on
+  // scene complexity, so don't scale the canvas up for retina displays.
+  renderer.setPixelRatio(1);
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    showFallback();
+  });
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
@@ -61,7 +80,7 @@ async function init() {
   groundTex.repeat.set(GROUND_SIZE / 2, GROUND_SIZE / 2);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
-    new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 })
+    new THREE.MeshLambertMaterial({ map: groundTex })
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
@@ -264,6 +283,7 @@ async function init() {
 
   loadingEl.hidden = true;
   hintEl.hidden = false;
+  markReady();
   requestAnimationFrame(animate);
 }
 
@@ -291,7 +311,7 @@ function makeCheckerTexture() {
 }
 
 function stoneMaterial(color) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.95, flatShading: true });
+  return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
 function buildPerimeter(scene, groundSize) {
@@ -395,7 +415,7 @@ function createPortal({ color, label, position, url, external }) {
 
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(1.15, 0.07, 8, 24),
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.2, roughness: 0.4 })
+    new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 1.2 })
   );
   ring.position.copy(disc.position);
   group.add(ring);
@@ -430,28 +450,28 @@ function createPlayer() {
 
   const robe = new THREE.Mesh(
     new THREE.CylinderGeometry(0.08, 0.5, 1.1, 8),
-    new THREE.MeshStandardMaterial({ color: 0x5b3fd6, flatShading: true })
+    new THREE.MeshLambertMaterial({ color: 0x5b3fd6, flatShading: true })
   );
   robe.position.y = 0.75;
   group.add(robe);
 
   const head = new THREE.Mesh(
     new THREE.SphereGeometry(0.26, 10, 8),
-    new THREE.MeshStandardMaterial({ color: 0xe7b98c, flatShading: true })
+    new THREE.MeshLambertMaterial({ color: 0xe7b98c, flatShading: true })
   );
   head.position.y = 1.5;
   group.add(head);
 
   const hat = new THREE.Mesh(
     new THREE.ConeGeometry(0.36, 0.65, 8),
-    new THREE.MeshStandardMaterial({ color: 0x3d2a99, flatShading: true })
+    new THREE.MeshLambertMaterial({ color: 0x3d2a99, flatShading: true })
   );
   hat.position.y = 1.95;
   group.add(hat);
 
   const hatBand = new THREE.Mesh(
     new THREE.TorusGeometry(0.3, 0.04, 6, 12),
-    new THREE.MeshStandardMaterial({ color: 0xffcc4d, flatShading: true })
+    new THREE.MeshLambertMaterial({ color: 0xffcc4d, flatShading: true })
   );
   hatBand.rotation.x = Math.PI / 2;
   hatBand.position.y = 1.68;
@@ -459,7 +479,7 @@ function createPlayer() {
 
   const staff = new THREE.Mesh(
     new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6),
-    new THREE.MeshStandardMaterial({ color: 0x8a5a2b, flatShading: true })
+    new THREE.MeshLambertMaterial({ color: 0x8a5a2b, flatShading: true })
   );
   staff.position.set(0.45, 0.85, 0.1);
   staff.rotation.z = -0.15;
@@ -467,7 +487,7 @@ function createPlayer() {
 
   const orb = new THREE.Mesh(
     new THREE.SphereGeometry(0.11, 8, 8),
-    new THREE.MeshStandardMaterial({ color: 0xffcc4d, emissive: 0xffcc4d, emissiveIntensity: 0.8 })
+    new THREE.MeshLambertMaterial({ color: 0xffcc4d, emissive: 0xffcc4d, emissiveIntensity: 0.8 })
   );
   orb.position.set(0.5, 1.55, 0.12);
   group.add(orb);

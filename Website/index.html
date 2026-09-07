@@ -11,8 +11,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
-<script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+<script>
+  // Watchdog: if the 3D scene hasn't reported ready within a few seconds
+  // (old browser, blocked GPU, network hiccup, whatever), fall back to
+  // plain buttons instead of leaving people stuck on a loading screen.
+  window.__realmScene = { ready: false };
+  setTimeout(function () {
+    if (window.__realmScene.ready) return;
+    var loading = document.getElementById('scene-loading');
+    var fallback = document.getElementById('scene-fallback');
+    if (loading) loading.hidden = true;
+    if (fallback) fallback.hidden = false;
+  }, 6000);
 </script>
 </head>
 <body class="game-page">
