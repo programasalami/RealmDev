@@ -94,15 +94,9 @@ body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-family: var(--font-pixel);
-  font-size: 14px;
-  color: var(--text);
   text-decoration: none;
-  letter-spacing: 1px;
 }
-.logo-icon { width: 28px; height: 28px; image-rendering: pixelated; }
-.logo .accent { color: var(--gold); }
+.logo-icon { height: 48px; width: auto; }
 .site-nav { display: flex; gap: 24px; }
 .site-nav a {
   color: var(--text-dim);
@@ -260,6 +254,107 @@ body {
 .footer-nav a:hover { color: var(--gold); }
 .footer-nav .soon { opacity: 0.5; }
 .footer-copy { color: var(--text-dim); font-size: 16px; margin: 0; }
+
+/* 3D homepage scene */
+body.game-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+body.game-page main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+#scene-root {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 420px;
+  background: #7ec9ec;
+  overflow: hidden;
+}
+#scene-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: pointer;
+}
+#scene-loading,
+#scene-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  background: var(--bg);
+  padding: 24px;
+}
+.loading-text {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: var(--gold);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+#scene-fallback p { color: var(--text-dim); font-size: 20px; max-width: 420px; }
+#scene-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  background: rgba(13, 11, 26, 0.75);
+  border: 3px solid var(--border);
+  padding: 10px 18px;
+  pointer-events: none;
+}
+#scene-hint p { margin: 0; color: var(--text); font-size: 18px; }
+#scene-hint .key {
+  display: inline-block;
+  background: var(--panel);
+  border: 2px solid var(--gold-dim);
+  color: var(--gold);
+  padding: 1px 8px;
+  font-family: var(--font-pixel);
+  font-size: 11px;
+}
+
+#touch-joystick {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  width: 100px;
+  height: 100px;
+  touch-action: none;
+}
+#joystick-base {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(28, 23, 56, 0.55);
+  border: 3px solid var(--border);
+  touch-action: none;
+}
+#joystick-knob {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 204, 77, 0.85);
+  border: 2px solid var(--gold-dim);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
 
 @media (max-width: 640px) {
   .site-nav { gap: 14px; }
